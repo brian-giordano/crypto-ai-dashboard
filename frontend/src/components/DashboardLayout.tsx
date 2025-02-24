@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import Dashboard from "@/components/Dashboard";
+import { ThemeToggle } from "./ThemeToggle";
 
 const DashboardLayout: React.FC = () => {
   const [data, setData] = useState<any[]>([]);
@@ -21,7 +22,10 @@ const DashboardLayout: React.FC = () => {
   return (
     <div className="min-h-screen flex flex-col">
       <header className="bg-gray-800 text-white p-4">
-        <h1 className="text-2xl">Crypto AI Dashboard</h1>
+        <div className="flex justify-between items-center">
+          <h1 className="text-2xl">Crypto AI Dashboard</h1>
+          <ThemeToggle />
+        </div>
       </header>
       <main className="flex-grow p-4">
         {loading ? <p>Loading...</p> : <Dashboard data={data} />}
