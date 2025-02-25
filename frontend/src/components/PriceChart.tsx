@@ -1,3 +1,4 @@
+// PriceChart: style of price charts
 "use client";
 
 import { FC } from "react";
