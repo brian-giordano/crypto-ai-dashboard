@@ -1,4 +1,3 @@
-// PriceChart.tsx
 "use client";
 
 import { FC } from "react";
@@ -16,22 +15,17 @@ interface PriceChartProps {
   isPositive: boolean;
 }
 
+// Update to change number of datapoints in chart
 const PriceChart: FC<PriceChartProps> = ({ data, isPositive }) => {
-  {
-    /* Update to change number of datapoints in chart */
-  }
   const recentData = data.slice(-24);
 
   const maxPrice = Math.max(...recentData);
   const minPrice = Math.min(...recentData);
   const range = maxPrice - minPrice;
 
-  {
-    /* Normalize to a 0-100 scale */
-  }
+  // Normalize to a 0-100 scale
   const chartData = recentData.map((price, index) => ({
     time: index,
-
     price: range > 0 ? ((price - minPrice) / range) * 100 : 0,
   }));
 
@@ -39,7 +33,7 @@ const PriceChart: FC<PriceChartProps> = ({ data, isPositive }) => {
     <ResponsiveContainer width="100%" height={50}>
       <LineChart data={chartData}>
         <XAxis dataKey="time" hide />
-        <YAxis hide domain={[0, 100]} /> // Adjust domain for normalized data
+        <YAxis hide domain={[0, 100]} />{" "}
         <Tooltip contentStyle={{ display: "none" }} />
         <Line
           type="monotone"
