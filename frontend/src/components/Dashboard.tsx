@@ -1,11 +1,11 @@
 // components/Dashboard.tsx
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { CryptoData } from "@/types/crypto";
 
 const Dashboard: React.FC = () => {
-  const [selectedCryptos, setSelectedCryptos] = useState<CryptoData[]>([]);
+  const [selectedCryptos] = useState<CryptoData[]>([]);
 
   return (
     <div className="p-4">
