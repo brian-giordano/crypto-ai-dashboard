@@ -17,15 +17,22 @@ interface PriceChartProps {
 }
 
 const PriceChart: FC<PriceChartProps> = ({ data, isPositive }) => {
-  const recentData = data.slice(-24); // Adjust this number as needed
+  {
+    /* Update to change number of datapoints in chart */
+  }
+  const recentData = data.slice(-24);
 
   const maxPrice = Math.max(...recentData);
   const minPrice = Math.min(...recentData);
   const range = maxPrice - minPrice;
 
+  {
+    /* Normalize to a 0-100 scale */
+  }
   const chartData = recentData.map((price, index) => ({
     time: index,
-    price: range > 0 ? ((price - minPrice) / range) * 100 : 0, // Normalize to a 0-100 scale
+
+    price: range > 0 ? ((price - minPrice) / range) * 100 : 0,
   }));
 
   return (
