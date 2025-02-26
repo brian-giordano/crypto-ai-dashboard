@@ -13,8 +13,8 @@ const Dashboard: React.FC = () => {
     <div>
       <h2 className="text-xl font-semibold mb-4">My Dashboard</h2>
       {dashboardCryptos.length === 0 ? ( // Check if there are no cryptocurrencies in the dashboard
-        <div className="text-center py-12 bg-gray-50 rounded-lg">
-          <p className="text-gray-500">
+        <div className="text-center py-12 bg-gray-50 rounded-lg dark:bg-neutral-950">
+          <p className="text-gray-500 dark:text-gray-300">
             Your dashboard is empty. Add cryptocurrencies from the market data
             panel.
           </p>
