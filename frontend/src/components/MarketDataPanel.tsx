@@ -6,9 +6,11 @@ import type { CryptoData } from "@/types/crypto";
 import { Button } from "./ui/button";
 import { Plus } from "lucide-react";
 import PriceChart from "./PriceChart";
+import { useCryptoStore } from "@/store/useCryptoStore";
 
 const TopMarketData: React.FC = () => {
-  const [data, setData] = useState<CryptoData[]>([]);
+  const { addToDashboard, setAvailableCryptos } = useCryptoStore(); // Access the addToDashboard method
+  const [data] = useState<CryptoData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -20,7 +22,7 @@ const TopMarketData: React.FC = () => {
           throw new Error("Failed to fetch data");
         }
         const result = await response.json();
-        setData(result);
+        setAvailableCryptos(result); // for maintaining list of available cryptos
       } catch (err) {
         setError(err instanceof Error ? err.message : "An error occurred");
       } finally {
@@ -29,7 +31,7 @@ const TopMarketData: React.FC = () => {
     };
 
     fetchData();
-  }, []);
+  }, [setAvailableCryptos]);
 
   if (loading) return <div>Loading market data...</div>;
   if (error) return <div className="text-red-500">{error}</div>;
@@ -49,7 +51,8 @@ const TopMarketData: React.FC = () => {
                 variant="outline"
                 size="sm"
                 onClick={() => {
-                  console.log(`Add ${crypto.name} to dashboard`);
+                  addToDashboard(crypto);
+                  // console.log(`Add ${crypto.name} to dashboard`);
                 }}
               >
                 <Plus className="h-[1.2rem] w-[1.2rem]" />

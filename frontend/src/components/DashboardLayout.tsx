@@ -3,7 +3,7 @@
 
 import React from "react";
 import Dashboard from "@/components/Dashboard";
-import TopMarketData from "@/components/TopMarketData"; // New component for top market data
+import TopMarketData from "@/components/MarketDataPanel"; // New component for top market data
 import { ThemeToggle } from "./ThemeToggle"; // Ensure the theme toggle is imported
 
 const DashboardLayout: React.FC = () => {
