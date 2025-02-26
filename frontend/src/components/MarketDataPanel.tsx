@@ -2,7 +2,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { CryptoData } from "@/types/crypto";
 import { Button } from "./ui/button";
 import { Plus } from "lucide-react";
 import PriceChart from "./PriceChart";
@@ -11,7 +10,6 @@ import { useCryptoStore } from "@/store/useCryptoStore";
 const TopMarketData: React.FC = () => {
   const { availableCryptos, addToDashboard, setAvailableCryptos } =
     useCryptoStore(); // Access the addToDashboard method
-  const [data] = useState<CryptoData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -47,7 +45,7 @@ const TopMarketData: React.FC = () => {
     <div>
       <h2 className="text-xl font-semibold mb-4">Top Crypto Market Data</h2>
       <div className="space-y-4">
-        {data.slice(0, 15).map((crypto) => (
+        {availableCryptos.slice(0, 15).map((crypto) => (
           <div
             key={crypto.id}
             className="p-3 border rounded-lg hover:bg-gray-50 transition-colors"

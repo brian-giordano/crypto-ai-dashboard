@@ -18,6 +18,8 @@ export async function GET() {
     }
 
     const data = await marketDataResponse.json();
+    console.log("API Response Data: ", data);
+
     return NextResponse.json(data);
   } catch (error) {
     console.error("Error fetching crypto data: ", error);
