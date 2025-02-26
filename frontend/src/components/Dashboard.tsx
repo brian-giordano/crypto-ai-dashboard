@@ -11,7 +11,7 @@ const Dashboard: React.FC = () => {
 
   return (
     <div className="p-4">
-      <h3 className="text-lg font-semibold mb-4">My Dashboard</h3>
+      <h2 className="text-xl font-semibold mb-4">My Dashboard</h2>
       {dashboardCryptos.length === 0 ? (
         <div className="text-center py-12 bg-gray-50 rounded-lg">
           <p className="text-gray-500">

@@ -3,23 +3,23 @@
 
 import React from "react";
 import Dashboard from "@/components/Dashboard";
-import TopMarketData from "@/components/MarketDataPanel"; // New component for top market data
-import { ThemeToggle } from "./ThemeToggle"; // Ensure the theme toggle is imported
+import TopMarketData from "@/components/MarketDataPanel";
+import { ThemeToggle } from "./ThemeToggle";
 
 const DashboardLayout: React.FC = () => {
   return (
     <div className="min-h-screen flex flex-col">
       <header className="bg-neutral-800 text-white p-4">
         <div className="flex justify-between items-center">
-          <h1 className="text-2xl">Crypto AI Dashboard</h1>
-          <ThemeToggle /> {/* Keep the theme toggle here */}
+          <h1 className="text-2xl">Vision Dashboard</h1>
+          <ThemeToggle />
         </div>
       </header>
-      <main className="flex-grow p-4 flex">
-        <div className="flex-grow h-3/4">
+      <main className="flex-grow p-4 flex flex-col md:flex-row">
+        <div className="flex-grow mv-4 md:mb-0 md:w-3/4">
           <Dashboard />
         </div>
-        <div className="w-80 ml-4 border-l pl-4">
+        <div className="w-full md:w-80 md:border-t-0 md:pl-4 md:ml-4">
           <TopMarketData />
         </div>
       </main>

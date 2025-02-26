@@ -7,7 +7,7 @@ import { Plus } from "lucide-react";
 import PriceChart from "./PriceChart";
 import { useCryptoStore } from "@/store/useCryptoStore";
 
-const TopMarketData: React.FC = () => {
+const MarketDataPanel: React.FC = () => {
   const { availableCryptos, addToDashboard, setAvailableCryptos } =
     useCryptoStore(); // Access the addToDashboard method
   const [loading, setLoading] = useState(true);
@@ -94,4 +94,4 @@ const TopMarketData: React.FC = () => {
   );
 };
 
-export default TopMarketData;
+export default MarketDataPanel;
