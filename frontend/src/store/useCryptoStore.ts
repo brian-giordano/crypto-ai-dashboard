@@ -31,9 +31,7 @@ export const useCryptoStore = create<CryptoStore>((set) => ({
           (c) => c.id !== cryptoId
         ),
         availableCryptos: cryptoToRemove
-          ? [...state.availableCryptos, cryptoToRemove].filter(
-              (c) => c.id !== cryptoId //prevent duplicates
-            )
+          ? [...state.availableCryptos, cryptoToRemove]
           : state.availableCryptos,
       };
     }),
