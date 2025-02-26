@@ -1,4 +1,4 @@
-// src/store/useCryptoStore.ts: store for zustand
+// src/store/useCryptoStore.ts
 import { create } from "zustand";
 import { CryptoData } from "@/types/crypto";
 
@@ -31,7 +31,7 @@ export const useCryptoStore = create<CryptoStore>((set) => ({
           (c) => c.id !== cryptoId
         ),
         availableCryptos: cryptoToRemove
-          ? [...state.availableCryptos, cryptoToRemove]
+          ? [...state.availableCryptos, cryptoToRemove] // Add back to available
           : state.availableCryptos,
       };
     }),

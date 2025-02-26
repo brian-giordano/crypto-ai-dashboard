@@ -41,6 +41,10 @@ const TopMarketData: React.FC = () => {
   if (loading) return <div>Loading market data...</div>;
   if (error) return <div className="text-red-500">{error}</div>;
 
+  const sortedAvailableCryptos = availableCryptos.sort(
+    (a, b) => b.market_cap - a.market_cap
+  ); // sort by MC before render.
+
   return (
     <div>
       <h2 className="text-xl font-semibold mb-4">Top Crypto Market Data</h2>
