@@ -9,13 +9,20 @@ import PriceChart from "./PriceChart";
 import { useCryptoStore } from "@/store/useCryptoStore";
 
 const TopMarketData: React.FC = () => {
-  const { addToDashboard, setAvailableCryptos } = useCryptoStore(); // Access the addToDashboard method
+  const { availableCryptos, addToDashboard, setAvailableCryptos } =
+    useCryptoStore(); // Access the addToDashboard method
   const [data] = useState<CryptoData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchData = async () => {
+      // If data is already available, skip fetching to avoid rate limit.
+      if (availableCryptos.length > 0) {
+        setLoading(false);
+        return;
+      }
+
       try {
         const response = await fetch("/api/crypto");
         if (!response.ok) {
@@ -31,7 +38,7 @@ const TopMarketData: React.FC = () => {
     };
 
     fetchData();
-  }, [setAvailableCryptos]);
+  }, [availableCryptos, setAvailableCryptos]);
 
   if (loading) return <div>Loading market data...</div>;
   if (error) return <div className="text-red-500">{error}</div>;
