@@ -1,4 +1,3 @@
-import { StringToBoolean } from "class-variance-authority/types";
 import React from "react";
 import PriceChart from "./PriceChart";
 
@@ -40,6 +39,7 @@ const DashboardCard: React.FC<DashboardCardProps> = ({
           <PriceChart data={chartData} isPositive={isPositive} />
         </div>
       )}
+      {children}
     </div>
   );
 };
