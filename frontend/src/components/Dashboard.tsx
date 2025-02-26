@@ -10,7 +10,7 @@ const Dashboard: React.FC = () => {
   const { removeFromDashboard } = useCryptoStore(); // Access the addToDashboard method
 
   return (
-    <div className="p-4">
+    <div>
       <h2 className="text-xl font-semibold mb-4">My Dashboard</h2>
       {dashboardCryptos.length === 0 ? (
         <div className="text-center py-12 bg-gray-50 rounded-lg">

@@ -47,7 +47,9 @@ const MarketDataPanel: React.FC = () => {
 
   return (
     <div>
-      <h2 className="text-xl font-semibold mb-4">Top Crypto Market Data</h2>
+      <h2 className="text-xl font-semibold mb-4 mt-4">
+        Top Crypto Market Data
+      </h2>
       <div className="space-y-4">
         {sortedAvailableCryptos.slice(0, 15).map((crypto) => (
           <div
