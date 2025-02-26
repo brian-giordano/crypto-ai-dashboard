@@ -49,7 +49,7 @@ const TopMarketData: React.FC = () => {
     <div>
       <h2 className="text-xl font-semibold mb-4">Top Crypto Market Data</h2>
       <div className="space-y-4">
-        {availableCryptos.slice(0, 15).map((crypto) => (
+        {sortedAvailableCryptos.slice(0, 15).map((crypto) => (
           <div
             key={crypto.id}
             className="p-3 border rounded-lg hover:bg-gray-50 transition-colors"
