@@ -34,7 +34,7 @@ const Dashboard: React.FC = () => {
                   <Button
                     variant="default"
                     className="group/btn opacity-0 group-hover/card:opacity-100 transition-opacity duration-200 
-                               w-16 bg-gray-500 hover:bg-red-500 absolute top-2 right-2"
+                               w-16 bg-gray-500 hover:bg-red-500 flex items-center justify-center md:absolute md:top-2 md:right-2"
                     size="sm"
                     onClick={() => {
                       removeFromDashboard(item.id); // Remove the cryptocurrency from the dashboard
