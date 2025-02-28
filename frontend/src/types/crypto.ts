@@ -14,4 +14,8 @@ export interface CryptoData {
   sparkline_in_7d: {
     price: number[];
   };
+  // Added properties for expanded view
+  circulating_supply: number;
+  high_24h: number;
+  low_24h: number;
 }

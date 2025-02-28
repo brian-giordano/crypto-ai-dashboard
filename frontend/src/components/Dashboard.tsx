@@ -29,6 +29,29 @@ const Dashboard: React.FC = () => {
                 value={`$${item.current_price.toLocaleString()}`} // Current price formatted as a string
                 changePercentage={item.price_change_percentage_24h} // Percentage change in price (assuming this property exists)
                 chartData={item.sparkline_in_7d.price} // Sparkline data for the price chart (assuming this property exists)
+                marketCap={
+                  item.market_cap
+                    ? `$${item.market_cap.toLocaleString()}`
+                    : undefined
+                }
+                volume={
+                  item.total_volume
+                    ? `$${item.total_volume.toLocaleString()}`
+                    : undefined
+                }
+                supply={
+                  item.circulating_supply
+                    ? `${item.circulating_supply.toLocaleString()} ${item.symbol.toUpperCase()}`
+                    : undefined
+                }
+                high24h={
+                  item.high_24h
+                    ? `$${item.high_24h.toLocaleString()}`
+                    : undefined
+                }
+                low24h={
+                  item.low_24h ? `$${item.low_24h.toLocaleString()}` : undefined
+                }
               >
                 <div className="flex justify-center w-full mt-4">
                   <Button
