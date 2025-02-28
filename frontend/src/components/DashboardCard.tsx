@@ -1,6 +1,6 @@
-import React, { useState } from "react";
+import React from "react";
 import PriceChart from "./PriceChart";
-import { ChevronDown, ChevronUp } from "lucide-react";
+// import { ChevronDown, ChevronUp } from "lucide-react";
 
 interface DashboardCardProps {
   title: string;
@@ -21,14 +21,9 @@ const DashboardCard: React.FC<DashboardCardProps> = ({
   changePercentage,
   chartData,
   children,
-  marketCap,
-  volume,
-  supply,
-  high24h,
-  low24h,
 }) => {
   const isPositive = changePercentage ? changePercentage >= 0 : false;
-  const [isExpanded, setIsExpanded] = useState<boolean>(false);
+  //   const [isExpanded, setIsExpanded] = useState<boolean>(false);
 
   return (
     <div
