@@ -32,12 +32,13 @@ const DashboardCard: React.FC<DashboardCardProps> = ({
 
   return (
     <div
-      className={`bg-white shadow-md rounded-lg p-4 flex flex-col dark:bg-black cursor-pointer hover:shadow-lg transition-all duration-300 ${
+      className={`relative bg-white dark:bg-black hover:bg-gray-50 dark:hover:bg-gray-900 shadow-md hover:shadow-xl rounded-lg p-4 flex flex-col cursor-pointer transition-all duration-300 ${
         isExpanded ? "col-span-2 row-span-2" : ""
       }`}
       onClick={() => setIsExpanded(!isExpanded)}
     >
-      <div className="flex justify-between items-start">
+      {/* Card Header - Always visible */}
+      <div className="flex justify-between items-start mb-2">
         <div>
           <h2 className="text-lg font-semibold">{title}</h2>
           <p className="text-2xl font-bold text-gray-600 dark:text-gray-400">
@@ -55,29 +56,36 @@ const DashboardCard: React.FC<DashboardCardProps> = ({
           )}
         </div>
 
-        <div className="flex items-center space-x-2">
-          <div onClick={(e) => e.stopPropagation()}>{children}</div>
-          <div className="p-1 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full">
-            {isExpanded ? (
-              <ChevronUp className="h-5 w-5" />
-            ) : (
-              <ChevronDown className="h-5 w-5" />
-            )}
-          </div>
+        {/* Remove Button - Top right on all screen sizes */}
+        <div
+          onClick={(e) => e.stopPropagation()}
+          className="absolute top-3 right-3 z-10"
+        >
+          {children}
         </div>
       </div>
 
+      {/* Chart - Always visible but can be larger when expanded */}
       {chartData && (
-        <div className={`mt-2 ${isExpanded ? "h-40" : "h-20"}`}>
-          {/* Placeholder for a chart component */}
-          {/* We can integrate a chart library here, e.g., Recharts or TanStack Charts */}
+        <div className={`mt-2 ${isExpanded ? "h-40" : "h-20"} flex-grow`}>
           <PriceChart data={chartData} isPositive={isPositive} />
         </div>
       )}
 
+      {/* Expand/Collapse Indicator - Bottom right */}
+      <div className="flex justify-end mt-2">
+        <div className="p-1 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full">
+          {isExpanded ? (
+            <ChevronUp className="h-5 w-5" />
+          ) : (
+            <ChevronDown className="h-5 w-5" />
+          )}
+        </div>
+      </div>
+
       {/* EXPANDED CONTENT */}
       {isExpanded && (
-        <div className="mt-4 space-y-3">
+        <div className="mt-4 space-y-3 border-t pt-3">
           <div className="grid grid-cols-2 gap-4">
             {marketCap && (
               <div>
@@ -122,8 +130,6 @@ const DashboardCard: React.FC<DashboardCardProps> = ({
           </div>
         </div>
       )}
-
-      {/* {children} */}
     </div>
   );
 };
