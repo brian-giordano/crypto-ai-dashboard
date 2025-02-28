@@ -13,34 +13,42 @@ const Dashboard: React.FC = () => {
     <div>
       <h2 className="text-xl font-semibold mb-4">My Dashboard</h2>
       {dashboardCryptos.length === 0 ? ( // Check if there are no cryptocurrencies in the dashboard
-        <div className="text-center py-12 bg-gray-50 rounded-lg dark:bg-neutral-950">
-          <p className="text-gray-500 dark:text-gray-300">
+        <div className="text-center p-12 bg-gray-300 rounded-lg dark:bg-gray-950 ">
+          <p className="text-gray-700 dark:text-gray-700">
             Your dashboard is empty. Add cryptocurrencies from the market data
             panel.
           </p>
         </div>
       ) : (
         // Use a grid layout for displaying DashboardCard components
-        <div className="grid grid-cols-2 gap-4 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-2 gap-4 bg-gray-300 rounded-lg p-4 md:grid-cols-2 lg:grid-cols-3 dark:bg-gray-800">
           {dashboardCryptos.map((item) => (
-            <DashboardCard
-              key={item.id} // Unique key for each card
-              title={item.name} // Title of the cryptocurrency
-              value={`$${item.current_price.toLocaleString()}`} // Current price formatted as a string
-              changePercentage={item.price_change_percentage_24h} // Percentage change in price (assuming this property exists)
-              chartData={item.sparkline_in_7d.price} // Sparkline data for the price chart (assuming this property exists)
-            >
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  removeFromDashboard(item.id); // Remove the cryptocurrency from the dashboard
-                }}
+            <div key={item.id} className="group/card">
+              <DashboardCard
+                title={item.name} // Title of the cryptocurrency
+                value={`$${item.current_price.toLocaleString()}`} // Current price formatted as a string
+                changePercentage={item.price_change_percentage_24h} // Percentage change in price (assuming this property exists)
+                chartData={item.sparkline_in_7d.price} // Sparkline data for the price chart (assuming this property exists)
               >
-                <Minus className="h-[1.2rem] w-[1.2rem]" />{" "}
-                {/* Minus icon for removing the cryptocurrency */}
-              </Button>
-            </DashboardCard>
+                <div className="flex justify-center w-full mt-4">
+                  <Button
+                    variant="default"
+                    className="group/btn opacity-0 group-hover/card:opacity-100 transition-opacity duration-200 
+                               w-16 bg-gray-500 hover:bg-red-500 flex items-center justify-center"
+                    size="sm"
+                    onClick={() => {
+                      removeFromDashboard(item.id); // Remove the cryptocurrency from the dashboard
+                    }}
+                  >
+                    <Minus className="block group-hover/btn:hidden h-[1.2rem] mx-auto" />
+                    <span className="hidden group-hover/btn:block text-center">
+                      Remove
+                    </span>
+                    {/* Minus icon for removing the cryptocurrency */}
+                  </Button>
+                </div>
+              </DashboardCard>
+            </div>
           ))}
         </div>
       )}

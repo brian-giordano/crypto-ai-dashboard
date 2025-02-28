@@ -8,8 +8,8 @@ import { ThemeToggle } from "./ThemeToggle";
 
 const DashboardLayout: React.FC = () => {
   return (
-    <div className="min-h-screen flex flex-col">
-      <header className="bg-neutral-800 text-white p-4">
+    <div className="min-h-screen flex flex-col dark:bg-gray-900">
+      <header className="bg-black text-white p-4">
         <div className="flex justify-between items-center">
           <h1 className="text-2xl">Vision Dashboard</h1>
           <ThemeToggle />
@@ -23,7 +23,7 @@ const DashboardLayout: React.FC = () => {
           <TopMarketData />
         </div>
       </main>
-      <footer className="bg-neutral-900 text-white p-4 text-center">
+      <footer className="bg-black text-white p-4 text-center">
         © 2025 Crypto AI Dashboard
       </footer>
     </div>

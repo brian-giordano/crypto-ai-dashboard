@@ -47,36 +47,35 @@ const MarketDataPanel: React.FC = () => {
 
   return (
     <div>
-      <h2 className="text-xl font-semibold mb-4 mt-4">
-        Top Crypto Market Data
-      </h2>
+      <h2 className="text-xl font-semibold mb-4">Top Crypto Market Data</h2>
       <div className="space-y-4">
         {sortedAvailableCryptos.slice(0, 15).map((crypto) => (
           <div
             key={crypto.id}
-            className="p-3 border rounded-lg hover:bg-gray-50 transition-colors"
+            className="p-3 border rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors dark:bg-gray-800"
           >
             <div className="flex justify-between items-center">
               <span className="font-medium">{crypto.name}</span>
               <Button
-                variant="outline"
+                variant="default"
+                className="group size-8 dark:bg-gray-500 hover:dark:bg-green-600 hover:scale-105"
                 size="sm"
                 onClick={() => {
                   addToDashboard(crypto);
                   // console.log(`Add ${crypto.name} to dashboard`);
                 }}
               >
-                <Plus className="h-[1.2rem] w-[1.2rem]" />
+                <Plus className=" dark:text-gray-200 group-hover:text-gray-200 group-hover:scale-125 transition-all" />
               </Button>
             </div>
-            <div className="mt-2 text-sm text-gray-600 flex justify-between items-start">
+            <div className="mt-2 text-sm text-gray-600 flex justify-between items-start dark:text-gray-300">
               <div>
                 <div>${crypto.current_price.toLocaleString()}</div>
                 <div
                   className={
                     crypto.price_change_percentage_24h >= 0
                       ? "text-green-600"
-                      : "text-red-600"
+                      : "text-red-500"
                   }
                 >
                   24h: {crypto.price_change_percentage_24h.toFixed(2)}%
