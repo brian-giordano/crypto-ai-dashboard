@@ -21,7 +21,7 @@ const Dashboard: React.FC = () => {
         </div>
       ) : (
         // Use a grid layout for displaying DashboardCard components
-        <div className="grid grid-cols-2 gap-4 bg-gray-300 rounded-lg p-4 md:grid-cols-2 lg:grid-cols-3 dark:bg-gray-800">
+        <div className="grid grid-cols-2 gap-6 bg-gray-300 rounded-lg p-6 md:grid-cols-2 lg:grid-cols-3 dark:bg-gray-800">
           {dashboardCryptos.map((item) => (
             <div key={item.id} className="group/card">
               <DashboardCard
@@ -34,7 +34,7 @@ const Dashboard: React.FC = () => {
                   <Button
                     variant="default"
                     className="group/btn opacity-0 group-hover/card:opacity-100 transition-opacity duration-200 
-                               w-16 bg-gray-500 hover:bg-red-500 flex items-center justify-center"
+                               w-16 bg-gray-500 hover:bg-red-500 absolute top-2 right-2"
                     size="sm"
                     onClick={() => {
                       removeFromDashboard(item.id); // Remove the cryptocurrency from the dashboard

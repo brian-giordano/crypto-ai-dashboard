@@ -27,7 +27,7 @@ const DashboardCard: React.FC<DashboardCardProps> = ({
 
   return (
     <div
-      className="bg-white shadow-md rounded-lg p-4 flex flex-col hover:bg-gray-50 dark:bg-black dark:hover:bg-gray-600 cursor-pointer hover:shadow-lg hover:scale-105 transition-transform"
+      className="bg-white shadow-md rounded-lg p-4 flex flex-col hover:bg-gray-50 dark:bg-black dark:hover:bg-gray-600 cursor-pointer hover:scale-105 hover:shadow-lg transition-transform"
       onClick={() => {
         console.log(`Clicked on ${title}`);
       }}
