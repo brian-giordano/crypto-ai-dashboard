@@ -21,7 +21,7 @@ const Dashboard: React.FC = () => {
         </div>
       ) : (
         // Use a grid layout for displaying DashboardCard components
-        <div className="grid grid-cols-2 gap-6 bg-gray-300 rounded-lg p-6 md:grid-cols-2 lg:grid-cols-3 dark:bg-gray-800">
+        <div className="grid grid-cols-1 gap-6 bg-gray-300 rounded-lg p-6 md:grid-cols-2 lg:grid-cols-3 dark:bg-gray-800">
           {dashboardCryptos.map((item) => (
             <div key={item.id} className="group/card">
               <DashboardCard
