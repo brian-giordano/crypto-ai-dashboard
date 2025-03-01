@@ -15,6 +15,32 @@ interface DashboardCardProps {
   low24h?: string;
 }
 
+// Utility function for formatting large numbers
+const formatLargeNumber = (value: string | number | undefined): string => {
+  if (value === undefined) return "-";
+
+  // Convert to string, if necessary
+  const num =
+    typeof value === "string"
+      ? parseFloat(value.replace(/[^0-9.-]+/g, ""))
+      : value;
+
+  if (isNaN(num)) return "-";
+
+  // Format number based on size
+  if (num >= 1e12) {
+    return `${(num / 1e12).toFixed(2)} T`;
+  } else if (num >= 1e9) {
+    return `${(num / 1e9).toFixed(2)} B`;
+  } else if (num >= 1e6) {
+    return `${(num / 1e6).toFixed(2)} M`;
+  } else if (num >= 1e3) {
+    return `${(num / 1e3).toFixed(2)} K`;
+  } else {
+    return num.toFixed(2);
+  }
+};
+
 const DashboardCard: React.FC<DashboardCardProps> = ({
   title,
   value,
@@ -29,6 +55,11 @@ const DashboardCard: React.FC<DashboardCardProps> = ({
 }) => {
   const isPositive = changePercentage ? changePercentage >= 0 : false;
   const [isExpanded, setIsExpanded] = useState<boolean>(false);
+
+  // Format the values
+  const formattedMarketCap = formatLargeNumber(marketCap);
+  const formattedVolume = formatLargeNumber(volume);
+  const formattedSupply = formatLargeNumber(supply);
 
   return (
     <div
@@ -67,7 +98,8 @@ const DashboardCard: React.FC<DashboardCardProps> = ({
 
       {/* Chart - Always visible but can be larger when expanded */}
       {chartData && (
-        <div className={`mt-2 ${isExpanded ? "h-40" : "h-20"} flex-grow`}>
+        // <div className={`mt-2 ${isExpanded ? "h-40" : "h-20"} flex-grow`}>
+        <div className={`mt-2 flex-grow`}>
           <PriceChart data={chartData} isPositive={isPositive} />
         </div>
       )}
@@ -86,46 +118,46 @@ const DashboardCard: React.FC<DashboardCardProps> = ({
       {/* EXPANDED CONTENT */}
       {isExpanded && (
         <div className="mt-4 space-y-3 border-t pt-3">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 gap-x-4 gap-y-2">
             {marketCap && (
-              <div>
-                <h3 className="text-sm text-gray-500 dark:text-gray-400">
+              <>
+                <h3 className="text-sm text-gray-500 dark:text-gray-400 text-left">
                   Market Cap
                 </h3>
-                <p className="font-medium">{marketCap}</p>
-              </div>
+                <p className="text-sm text-right">${formattedMarketCap}</p>
+              </>
             )}
             {volume && (
-              <div>
-                <h3 className="text-sm text-gray-500 dark:text-gray-400">
+              <>
+                <h3 className="text-sm text-gray-500 dark:text-gray-400 text-left">
                   24h Volume
                 </h3>
-                <p className="font-medium">{volume}</p>
-              </div>
+                <p className="text-sm text-right">${formattedVolume}</p>
+              </>
             )}
             {supply && (
-              <div>
-                <h3 className="text-sm text-gray-500 dark:text-gray-400">
-                  Circulating Supply
+              <>
+                <h3 className="text-sm text-gray-500 dark:text-gray-400 text-left">
+                  Circ. Supply
                 </h3>
-                <p className="font-medium">{supply}</p>
-              </div>
+                <p className="text-sm text-right">{formattedSupply}</p>
+              </>
             )}
             {high24h && (
-              <div>
-                <h3 className="text-sm text-gray-500 dark:text-gray-400">
+              <>
+                <h3 className="text-sm text-gray-500 dark:text-gray-400 text-left">
                   24h High
                 </h3>
-                <p className="font-medium">{high24h}</p>
-              </div>
+                <p className="text-sm text-right">{high24h}</p>
+              </>
             )}
             {low24h && (
-              <div>
-                <h3 className="text-sm text-gray-500 dark:text-gray-400">
+              <>
+                <h3 className="text-sm text-gray-500 dark:text-gray-400 text-left">
                   24h Low
                 </h3>
-                <p className="font-medium">{low24h}</p>
-              </div>
+                <p className="text-sm text-right">{low24h}</p>
+              </>
             )}
           </div>
         </div>
