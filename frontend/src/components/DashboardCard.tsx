@@ -63,7 +63,7 @@ const DashboardCard: React.FC<DashboardCardProps> = ({
 
   return (
     <div
-      className={`relative bg-white dark:bg-black hover:bg-gray-50 dark:hover:bg-gray-900 shadow-md hover:shadow-xl rounded-lg p-4 flex flex-col cursor-pointer transition-all duration-300 ${
+      className={`relative bg-white dark:bg-black hover:bg-gray-50 dark:hover:bg-gray-900 shadow-md hover:shadow-xl rounded-lg p-6 flex flex-col cursor-pointer transition-all duration-300 ${
         isExpanded ? "col-span-2 row-span-2" : ""
       }`}
       onClick={() => setIsExpanded(!isExpanded)}
@@ -118,7 +118,7 @@ const DashboardCard: React.FC<DashboardCardProps> = ({
       {/* EXPANDED CONTENT */}
       {isExpanded && (
         <div className="mt-4 space-y-3 border-t pt-3">
-          <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+          <div className="grid grid-cols-2 gap-x-4 gap-y-4">
             {marketCap && (
               <>
                 <h3 className="text-sm text-gray-500 dark:text-gray-400 text-left">
