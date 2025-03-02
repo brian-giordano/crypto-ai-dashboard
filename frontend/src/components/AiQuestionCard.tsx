@@ -1,9 +1,12 @@
 import React, { useState } from "react";
 import { Sparkles } from "lucide-react";
-import { Button } from "./ui/button"; // Import Shadcn Button component
+import { Button } from "./ui/button";
+import { useQuery } from "@tanstack/react-query";
 
 interface AIResponse {
   text: string;
+  sentiment?: string;
+  confidence?: number;
   metrics?: {
     price: string;
     marketCap: string;
@@ -14,9 +17,38 @@ interface AIResponse {
 
 const AiQuestionCard: React.FC = () => {
   const [question, setQuestion] = useState<string>("");
-  const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [response, setResponse] = useState<AIResponse | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [currentQuestion, setCurrentQuestion] = useState<string>("");
+
+  // Use React Query for data fetching with proper caching
+  const {
+    data: response,
+    isLoading,
+    error,
+    refetch,
+    isError,
+  } = useQuery<AIResponse, Error>({
+    queryKey: ["aiResponse", currentQuestion],
+    queryFn: async () => {
+      if (!currentQuestion) return null;
+
+      const res = await fetch("/api/ai", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ question: currentQuestion }),
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.error || "Failed to get AI response");
+      }
+
+      return res.json();
+    },
+    enabled: !!currentQuestion, // Only run the query if we have a question
+    staleTime: 1000 * 60 * 5, // Cache responses for 5 minutes
+  });
 
   const suggestedQuestions = [
     "What is the trend for Bitcoin?",
@@ -28,40 +60,12 @@ const AiQuestionCard: React.FC = () => {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!question.trim()) return;
-
-    // Simulate API call to AI service for now...
-    setIsLoading(true);
-    setResponse(null);
-    setError(null);
-
-    // Mock response - in the real app, this will be an API call...
-    setTimeout(() => {
-      setIsLoading(false);
-      if (Math.random() > 0.1) {
-        // Fixed typo here (was 0, 1)
-        setResponse({
-          text: `Based on my analysis, ${
-            question.includes("Bitcoin")
-              ? "Bitcoin shows a bullish trend with increasing volume. Technical indicators suggest potential resistance at $65,000."
-              : "the cryptocurrency market is showing mixed signals. Some altcoins are outperforming Bitcoin in the short term, but overall market sentiment remains cautious."
-          }`,
-          metrics: {
-            price: "$48,235.67",
-            marketCap: "$923.5B",
-            volume24h: "$32.1B",
-            change24h: "+2.3%",
-          },
-        });
-      } else {
-        setError(
-          "I couldn't process that question. Please try rephrasing or ask something else."
-        );
-      }
-    }, 1500);
+    setCurrentQuestion(question);
   };
 
   const selectSuggestedQuestion = (q: string) => {
     setQuestion(q);
+    setCurrentQuestion(q); // Immediately trigger the query
   };
 
   return (
@@ -83,7 +87,7 @@ const AiQuestionCard: React.FC = () => {
             />
             <Button
               type="submit"
-              disabled={isLoading}
+              disabled={isLoading || !question.trim()}
               className="rounded-l-none h-10 bg-pink-500"
               variant="default"
             >
@@ -153,9 +157,12 @@ const AiQuestionCard: React.FC = () => {
           </div>
         )}
 
-        {error && (
+        {isError && (
           <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-800 dark:text-red-200 rounded-lg p-4 mb-4">
-            <p>{error}</p>
+            <p>
+              {error?.message ||
+                "An error occurred while processing your question."}
+            </p>
           </div>
         )}
 
@@ -164,6 +171,28 @@ const AiQuestionCard: React.FC = () => {
             <p className="mb-4 text-gray-800 dark:text-gray-200">
               {response.text}
             </p>
+
+            {response.sentiment && (
+              <div className="mb-4 text-sm">
+                <span className="text-gray-500 dark:text-gray-400">
+                  Sentiment:{" "}
+                </span>
+                <span
+                  className={`font-medium ${
+                    response.sentiment === "POSITIVE"
+                      ? "text-green-500"
+                      : "text-red-500"
+                  }`}
+                >
+                  {response.sentiment}
+                </span>
+                {response.confidence && (
+                  <span className="text-gray-500 dark:text-gray-400 ml-2">
+                    (Confidence: {Math.round(response.confidence * 100)}%)
+                  </span>
+                )}
+              </div>
+            )}
 
             {response.metrics && (
               <div className="grid grid-cols-2 gap-2 mt-4">
