@@ -1,19 +1,11 @@
 // api/ai: Receives the question from the frontend, validates that a questions was provided,
 // forwards request to FastAPI, Returns the reponse from backend to the frontend
 
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { question } = body;
-
-    if (!question) {
-      return NextResponse.json(
-        { error: "Question is required" },
-        { status: 400 }
-      );
-    }
 
     // Call FastAPI backend
     const response = await fetch("http://localhost:8000/ask", {
@@ -21,13 +13,14 @@ export async function POST(request: Request) {
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ question }),
+      body: JSON.stringify(body),
     });
 
     if (!response.ok) {
-      const errorData = await response.json();
+      const errorText = await response.text();
+      console.error("FastAPI error:", errorText);
       return NextResponse.json(
-        { error: errorData.detail || "Failed to get response from AI service" },
+        { error: "Failed to get response from AI service" },
         { status: response.status }
       );
     }

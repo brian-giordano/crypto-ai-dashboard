@@ -179,7 +179,7 @@ const AiQuestionCard: React.FC = () => {
                 </span>
                 <span
                   className={`font-medium ${
-                    response.sentiment === "POSITIVE"
+                    response.sentiment.toUpperCase() === "POSITIVE"
                       ? "text-green-500"
                       : "text-red-500"
                   }`}
@@ -220,12 +220,16 @@ const AiQuestionCard: React.FC = () => {
                   </p>
                   <p
                     className={`font-medium ${
-                      response.metrics.change24h.startsWith("+")
+                      response.metrics &&
+                      response.metrics.change24h &&
+                      parseFloat(response.metrics.change24h) > 0
                         ? "text-green-500"
                         : "text-red-500"
                     }`}
                   >
-                    {response.metrics.change24h}
+                    {response.metrics && response.metrics.change24h
+                      ? `${parseFloat(response.metrics.change24h).toFixed(2)}%`
+                      : "N/A"}
                   </p>
                 </div>
               </div>
