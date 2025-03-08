@@ -4,11 +4,13 @@
 import { NextRequest, NextResponse } from "next/server";
 
 export async function POST(request: NextRequest) {
+  const backendUrl = process.env.NEXT_PUBLIC_API_URL;
+
   try {
     const body = await request.json();
 
     // Call FastAPI backend
-    const response = await fetch("http://localhost:8000/ask", {
+    const response = await fetch(`${backendUrl}/ask`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

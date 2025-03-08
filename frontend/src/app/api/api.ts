@@ -15,12 +15,12 @@ interface AIResponse {
   } | null;
 }
 
-const API_URL = "http://localhost:8000"; // FastAPI backend URL
+const backendUrl = process.env.NEXT_PUBLIC_API_URL; // FastAPI backend URL
 
 export const analyzeSentiment = async (
   text: string
 ): Promise<SentimentResponse> => {
-  const response = await fetch(`${API_URL}/analyze-sentiment/`, {
+  const response = await fetch(`${backendUrl}/analyze-sentiment/`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -36,7 +36,7 @@ export const analyzeSentiment = async (
 };
 
 export const askAI = async (question: string): Promise<AIResponse> => {
-  const response = await fetch(`${API_URL}/ask/`, {
+  const response = await fetch(`${backendUrl}/ask/`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

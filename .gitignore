@@ -2,6 +2,7 @@
 node_modules/
 .next/
 .env
+.env.local
 
 # Python
 python3-12-venv/

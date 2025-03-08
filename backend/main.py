@@ -10,6 +10,13 @@ import os
 import uvicorn
 import logging
 import psutil
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
+
+# Access environment variables
+frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
 
 logging.basicConfig(
     level=logging.INFO,
@@ -21,12 +28,13 @@ def log_memory_usage(stage: str):
     memory_info = process.memory_info()
     logging.info(f"{stage} - Memory usage: {memory_info.rss / 1024 / 1024:.2f} MB")
 
+# FastAPI App main
 app = FastAPI()
 
 # Add CORS middleware to allow requests from frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "https://crypto-ai-dashboard-lovat.vercel.app"], 
+    allow_origins=[frontend_url], 
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
