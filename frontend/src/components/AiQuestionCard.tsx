@@ -24,7 +24,7 @@ const AiQuestionCard: React.FC = () => {
     data: response,
     isLoading,
     error,
-    refetch,
+    // refetch,
     isError,
   } = useQuery<AIResponse, Error>({
     queryKey: ["aiResponse", currentQuestion],
