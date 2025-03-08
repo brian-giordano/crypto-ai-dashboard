@@ -27,6 +27,7 @@ packaging==24.2
 pandas==2.2.3
 pillow==11.1.0
 propcache==0.3.0
+psutil==7.0.0
 pyarrow==19.0.1
 pydantic==2.10.6
 pydantic_core==2.27.2

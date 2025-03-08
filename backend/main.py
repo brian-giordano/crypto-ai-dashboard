@@ -8,6 +8,18 @@ import time
 from functools import lru_cache
 import os
 import uvicorn
+import logging
+import psutil
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s",
+)
+
+def log_memory_usage(stage: str):
+    process = psutil.Process(os.getgid())
+    memory_info = process.memeory_info()
+    logging.info(f"{stage} - Memory usage: {memory_info.rss / 1024 / 1024:.2f} MB")
 
 app = FastAPI()
 
@@ -20,8 +32,23 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Global exception handler
+@app.exception_handler(Exception)
+async def global_exception_handler(request, exc):
+    logging.error(f"Unhandled exception: {exc}")
+    return {"detail": "An internal error occurred."}
+
 # Initialize the sentiment analysis pipeline, using FinBERT from HuggingFace
+
+# Log memory usage before initializing the pipeline
+log_memory_usage("Before initializing sentiment pipeline")
+logging.info("Initializing sentiment analysis pipeline...")
+
 sentiment_pipeline = pipeline("sentiment-analysis", model="yiyanghkust/finbert-tone")
+
+# Log memory usage after initializing the pipeline
+log_memory_usage("After initializing sentiment pipeline")
+logging.info("Sentiment analysis pipeline initialized successfully.")
 
 # Define Pydantic models
 class SentimentRequest(BaseModel):
@@ -154,7 +181,9 @@ async def health_check():
 # Sentiment analysis endpoint
 @app.post("/analyze-sentiment/")
 async def analyse_sentiment(request: SentimentRequest):
+    logging.info(f"Received sentiment analysis request: {request.text}")
     result = sentiment_pipeline(request.text)
+    logging.info(f"Sentiment analysis result: {result}")
     return {"sentiment": result[0]["label"].upper(), "score": min(result[0]["score"], 0.95)}
 
 # Helper function to format large numbers
