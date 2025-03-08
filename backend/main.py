@@ -7,6 +7,7 @@ from typing import Dict, Any, Optional, List
 import time
 from functools import lru_cache
 import os
+import uvicorn
 
 port = int(os.environ.get("PORT", 8000))
 
@@ -278,7 +279,7 @@ def get_sentiment_explanation(sentiment, confidence, coin_data=None):
     else:
         return "The market sentiment appears neutral, indicating a balance between positive and negative factors."
 
-# AI Question endpoint - changed to /ask to match your Next.js API route
+# AI Question endpoint
 @app.post("/ask", response_model=AIResponse)
 async def process_question(request: QueryRequest):
     try:
@@ -361,6 +362,5 @@ async def process_question(request: QueryRequest):
 
 # Run the application with Uvicorn if this file is executed directly
 if __name__ == "__main__":
-    import uvicorn
-    port = int(os.environ.get("PORT", 8000))
-    uvicorn.run(app, host="0.0.0.0", port=port, reload=True)
+    port = int(os.environ.get("PORT", 8000)) # Default to 8000 if port is not set
+    uvicorn.run(app, host="0.0.0.0", port=port)
