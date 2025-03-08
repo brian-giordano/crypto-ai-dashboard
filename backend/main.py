@@ -9,8 +9,6 @@ from functools import lru_cache
 import os
 import uvicorn
 
-port = int(os.environ.get("PORT", 8000))
-
 app = FastAPI()
 
 # Add CORS middleware to allow requests from frontend
@@ -144,8 +142,14 @@ crypto_service = CryptoDataService()
 
 # Basic route
 @app.get("/")
+@app.head("/")  # Added to handle HEAD requests
 async def read_root():
     return {"message": "Welcome to the Crypto AI Dashboard Backend!"}
+
+# Health check endpoint
+@app.get("/healthz")
+async def health_check():
+    return {"status": "ok"}
 
 # Sentiment analysis endpoint
 @app.post("/analyze-sentiment/")
