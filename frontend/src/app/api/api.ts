@@ -15,11 +15,12 @@ interface AIResponse {
   } | null;
 }
 
-const backendUrl = process.env.NEXT_PUBLIC_API_URL; // FastAPI backend URL
+const backendUrl = process.env.API_URL; // FastAPI backend URL
 
 export const analyzeSentiment = async (
   text: string
 ): Promise<SentimentResponse> => {
+  console.log("backendUrl: ", backendUrl);
   const response = await fetch(`${backendUrl}/analyze-sentiment/`, {
     method: "POST",
     headers: {

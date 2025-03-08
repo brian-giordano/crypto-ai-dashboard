@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 
+const GcApiUrl = process.env.GC_MARKET_DATA_API_URL;
+
 export async function GET() {
-  const GcApiUrl = process.env.NEXT_PUBLIC_GC_MARKET_DATA_API_URL;
   try {
     const marketDataResponse = await fetch(`${GcApiUrl}`);
 
