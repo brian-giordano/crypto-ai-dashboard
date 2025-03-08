@@ -17,8 +17,8 @@ logging.basicConfig(
 )
 
 def log_memory_usage(stage: str):
-    process = psutil.Process(os.getgid())
-    memory_info = process.memeory_info()
+    process = psutil.Process(os.getpid())
+    memory_info = process.memory_info()
     logging.info(f"{stage} - Memory usage: {memory_info.rss / 1024 / 1024:.2f} MB")
 
 app = FastAPI()
