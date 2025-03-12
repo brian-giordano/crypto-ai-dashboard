@@ -14,6 +14,7 @@ from dotenv import load_dotenv
 import json
 from redis import Redis
 from datetime import timedelta
+from urllib.parse import urlparse
 
 # Load environment variables
 load_dotenv()
@@ -21,17 +22,20 @@ load_dotenv()
 # Access environment variables
 frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
 
+# Load Redis URL from environment variables
+REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
+
+# Parse the Redis URL
+parsed_redis_url = urlparse(REDIS_URL)
+
 # Redis Configuration
-REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
-REDIS_PORT = int(os.getenv("REDIS_PORT", 6379))
-REDIS_PASSWORD = os.getenv("REDIS_PASSWORD", None)
 REDIS_CACHE_TTL = 300 # 5 minutes
 
 # Initialize Redis client
 redis_client = Redis(
-    host=REDIS_HOST,
-    port=REDIS_PORT,
-    password=REDIS_PASSWORD,
+    host=parsed_redis_url.hostname,
+    port=parsed_redis_url.port,
+    password=parsed_redis_url.password,
     decode_responses=True
 )
 
