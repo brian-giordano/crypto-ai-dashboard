@@ -11,12 +11,29 @@ import uvicorn
 import logging
 import psutil
 from dotenv import load_dotenv
+import json
+from redis import Redis
+from datetime import timedelta
 
 # Load environment variables
 load_dotenv()
 
 # Access environment variables
 frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
+
+# Redis Configuration
+REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
+REDIS_PORT = int(os.getenv("REDIS_PORT", 6379))
+REDIS_PASSWORD = os.getenv("REDIS_PASSWORD", None)
+REDIS_CACHE_TTL = 300 # 5 minutes
+
+# Initialize Redis client
+redis_client = Redis(
+    host=REDIS_HOST,
+    port=REDIS_PORT,
+    password=REDIS_PASSWORD,
+    decode_responses=True
+)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -34,7 +51,10 @@ app = FastAPI()
 # Add CORS middleware to allow requests from frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[frontend_url], 
+    allow_origins=[
+        frontend_url,  # Local frontend
+        "https://your-production-frontend-url.com",  # Production frontend
+    ], 
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -77,9 +97,9 @@ class CryptoDataService:
     def __init__(self):
         self.base_url = "https://api.coingecko.com/api/v3"
         self.last_request_time = 0
-        self.cache = {}
-        self.cache_expiry = {}
-        self.min_request_interval = 2  # 2 seconds between requests
+        self.min_request_interval = 2
+        self.redis_client = redis_client
+        self.default_ttl = REDIS_CACHE_TTL
 
     def _rate_limit(self):
         """Ensure rate limits arent exceeded"""
@@ -94,15 +114,19 @@ class CryptoDataService:
         cache_key = f"market_data_{vs_currency}_{limit}"
 
         # Check if the cached data is still valid
-
-        if cache_key in self.cache and time.time() < self.cache_expiry.get(cache_key, 0):
-            print(f"Using cached market data for {cache_key}")
-            return self.cache[cache_key]
+        # if cache_key in self.cache and time.time() < self.cache_expiry.get(cache_key, 0):
+        #     print(f"Using cached market data for {cache_key}")
+        #     return self.cache[cache_key]
 
         try:
-            # Rate limit requests
-            self._rate_limit()
+            # Try to get data from Redis
+            cached_data = self.redis_client.get(cache_key)
+            if cached_data:
+                logging.info(f"Cache hit for {cache_key}")
+                return json.loads(cached_data)
 
+            # If data is not cached, fetch from API
+            self._rate_limit()
             params = {
                "vs_currency": vs_currency,
                 "order": "market_cap_desc",
@@ -114,62 +138,88 @@ class CryptoDataService:
             response = requests.get(f"{self.base_url}/coins/markets", params=params)
 
             # If a rate limit is reached, return chached data if available
-            if response.status_code == 429 and cache_key in self.cache:
-                print(f"Rate limited, using cached data for {cache_key}")
-                return self.cache[cache_key]
+            if response.status_code == 429:
+                logging.warning("Rate limit reached, checking cache for stale data")
+                cached_data = self.redis_client.get(cache_key)
+                if cached_data:
+                    return json.loads(cached_data)
+                return []
 
             response.raise_for_status()
             data = response.json()
 
-            self.cache[cache_key] = data
-            self.cache_expiry[cache_key] = time.time() + 300 # 5 minutes
-            print(f"Cached fresh market data for {cache_key}")
+            # Store in Redis with TTL
+            self.redis_client.setex(
+                cache_key,
+                self.default_ttl,
+                json.dumps(data)
+            )
+            logging.info(f"Cached fresh market data for {cache_key}")
 
             return data
+        
         except Exception as e:
-            print(f"Error fetching market data: {e}")
-            # Return cached data if available, otherwise empty list
-            if cache_key in self.cache:
-                print(f"Error occurred, using chached data for {cache_key}")
-                return self.cache.get(cache_key, [])
+            logging.error(f"Error fetching market data: {e}")
+            # Attempt to get stale data from cache
+            cached_data = self.redis_client.get(cache_key)
+            if cached_data:
+                logging.info(f"Using stale cached data for {cache_key}")
+                return json.loads(cached_data)
             return []
 
     def get_coin_by_name(self, name: str) -> Optional[Dict[str, Any]]:
         """Find a coin by name or symbol in the top 100"""
-        cache_key = f"coin_by_name_{name}"
+        cache_key = f"coin:{name.lower()}"
 
         # Check if we have cached data that's still valid
-        if cache_key in self.cache and time.time() < self.cache_expiry.get(cache_key, 0):
-            print(f"Using cached coin data for {name}")
-            return self.cache[cache_key]
+        # if cache_key in self.cache and time.time() < self.cache_expiry.get(cache_key, 0):
+        #     print(f"Using cached coin data for {name}")
+        #     return self.cache[cache_key]
 
+
+        # Try to get data from Redis
         try:
+            cached_data = self.redis_client.get(cache_key)
+            if cached_data:
+                logging.info(f"Cache hit for coin {name}")
+                return json.loads(cached_data)
+
+            # If not in cache, search in market data
             market_data = self.get_market_data(limit=100)
             name_lower = name.lower()
 
             # Try exact match
-            for coin in market_data:
-                if coin["id"].lower() == name_lower or coin["symbol"].lower() == name_lower:
-                    # Cache the result for 5 minutes
-                    self.cache[cache_key] = coin
-                    self.cache_expiry[cache_key] = time.time() + 300   # 5 minutes
-                    return coin
+            coin = next(
+                (coin for coin in market_data
+                 if coin["id"].lower() == name_lower
+                 or coin["symbol"].lower() == name_lower),
+                 None
+            )
 
             # Try partial match
-            for coin in market_data:
-                if name_lower in coin["id"].lower() or name_lower in coin["symbol"].lower():
-                    # Cache the result for 5 minutes
-                    self.cache[cache_key] = coin
-                    self.cache_expiry[cache_key] = time.time() + 300  # 5 minutes
-                    return coin
+            if not coin:
+                coin = next(
+                    (coin for coin in market_data
+                     if coin["id"].lower() == name_lower
+                     or coin["symbol"].lower() == name_lower),
+                     None
+                )
 
-            # Cache negative result to avoid repeated lookups
-            self.cache[cache_key] = None
-            self.cache_expiry[cache_key] = time.time() + 300  # 5 minutes
-            return None
+            # Cache the results (even if None)
+            self.redis_client.setex(
+                cache_key,
+                self.default_ttl,
+                json.dumps(coin) if coin else "null"
+            )
+
+            return coin
             
         except Exception as e:
-            print(f"Error finding coin: {e}")
+            logging.error(f"Error finding coin: {e}")
+            # Try to get stale data from cache
+            cached_data = self.redis_client.get(cache_key)
+            if cached_data and cached_data != "null":
+                return json.loads(cached_data)
             return None
 
 # Initialize the crypto data service
@@ -185,6 +235,37 @@ async def read_root():
 @app.get("/healthz")
 async def health_check():
     return {"status": "ok"}
+
+# Redis health check endpoint
+@app.get("/healthz/redis")
+async def redis_health_check():
+    try:
+        redis_client.ping()
+        return {"status": "ok", "message": "Redis connection is healthy"}
+    except Exception as e:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Redis connection failed: {str(e)}"
+        )
+
+# Fetch from api/crypto endpoint
+@app.get("/api/crypto")
+async def get_crypto_data():
+    """Fetch cryptocurrency market data with Redis caching"""
+    try:
+        data = crypto_service.get_market_data()
+        if not data:
+            raise HTTPException(
+                status_code=503,
+                detail="Unable to fetch crypto data"
+            )
+        return data
+    except Exception as e:
+        logging.error(f"Error in /api/crypto endpoint: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=str(e)
+        )
 
 # Sentiment analysis endpoint
 @app.post("/analyze-sentiment/")

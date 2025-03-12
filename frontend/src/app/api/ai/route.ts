@@ -4,7 +4,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 export async function POST(request: NextRequest) {
-  const backendUrl = process.env.API_URL;
+  const backendUrl = process.env.NEXT_PUBLIC_API_URL;
 
   try {
     const body = await request.json();

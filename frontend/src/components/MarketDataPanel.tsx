@@ -3,9 +3,12 @@
 
 import { useEffect, useState } from "react";
 import { Button } from "./ui/button";
-import { Plus } from "lucide-react";
+import { Plus, RefreshCw } from "lucide-react";
 import PriceChart from "./PriceChart";
 import { useCryptoStore } from "@/store/useCryptoStore";
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+console.log("API_URL: ", API_URL);
 
 const MarketDataPanel: React.FC = () => {
   const { availableCryptos, addToDashboard, setAvailableCryptos } =
@@ -21,10 +24,19 @@ const MarketDataPanel: React.FC = () => {
         return;
       }
 
+      console.log("Fetching from: ", `${API_URL}/api/crypto`);
+
       try {
-        const response = await fetch("/api/crypto");
+        const response = await fetch(`${API_URL}/api/crypto`);
+        const data = await response.json();
+
+        console.log("Response status: ", response.status);
+        console.log("API Response: ", data);
+
         if (!response.ok) {
-          throw new Error("Failed to fetch data");
+          const errorData = await response.json();
+          console.error("API Error: ", errorData);
+          throw new Error("Failed to fetch data") || "Failed to fetch data";
         }
         const result = await response.json();
         setAvailableCryptos(result); // for maintaining list of available cryptos
@@ -41,9 +53,29 @@ const MarketDataPanel: React.FC = () => {
   if (loading) return <div>Loading market data...</div>;
   if (error) return <div className="text-red-500">{error}</div>;
 
+  // sort by MC before render.
   const sortedAvailableCryptos = availableCryptos.sort(
     (a, b) => b.market_cap - a.market_cap
-  ); // sort by MC before render.
+  );
+
+  // Empty state check
+  if (sortedAvailableCryptos.length === 0) {
+    return (
+      <div className="p-8 text-center border rounded-lg dark:border-gray-700">
+        <div className="text-gray-500 dark:text-gray-400 mb-4">
+          No cryptocurrency data available
+        </div>
+        <Button
+          variant="outline"
+          onClick={() => window.location.reload()}
+          className="text-sm gap-2"
+        >
+          <RefreshCw className="h-4 w-4" />
+          Refresh Data
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <div>
