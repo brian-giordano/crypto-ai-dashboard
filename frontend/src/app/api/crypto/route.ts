@@ -4,7 +4,15 @@ const GcApiUrl = process.env.NEXT_PUBLIC_GC_MARKET_DATA_API_URL;
 
 export async function GET() {
   try {
-    const marketDataResponse = await fetch(`${GcApiUrl}`);
+    const params = new URLSearchParams({
+      vs_currency: "usd",
+      order: "market_cap_desc",
+      page_per: "100",
+      sparkline: "true",
+      price_change_percentage: "24h",
+    });
+
+    const marketDataResponse = await fetch(`${GcApiUrl}?${params}`);
 
     if (!marketDataResponse.ok) {
       // Log the actual error response for debugging

@@ -12,7 +12,7 @@ console.log("API_URL: ", API_URL);
 
 const MarketDataPanel: React.FC = () => {
   const { availableCryptos, addToDashboard, setAvailableCryptos } =
-    useCryptoStore(); // Access the addToDashboard method
+    useCryptoStore();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -28,18 +28,16 @@ const MarketDataPanel: React.FC = () => {
 
       try {
         const response = await fetch(`${API_URL}/api/crypto`);
-        const data = await response.json();
-
         console.log("Response status: ", response.status);
-        console.log("API Response: ", data);
 
         if (!response.ok) {
-          const errorData = await response.json();
-          console.error("API Error: ", errorData);
-          throw new Error("Failed to fetch data") || "Failed to fetch data";
+          throw new Error("Failed to fetch data");
         }
-        const result = await response.json();
-        setAvailableCryptos(result); // for maintaining list of available cryptos
+
+        const data = await response.json(); // Only call .json() once
+        console.log("API Response: ", data);
+
+        setAvailableCryptos(data); // Set the data directly
       } catch (err) {
         setError(err instanceof Error ? err.message : "An error occurred");
       } finally {
@@ -94,10 +92,9 @@ const MarketDataPanel: React.FC = () => {
                 size="sm"
                 onClick={() => {
                   addToDashboard(crypto);
-                  // console.log(`Add ${crypto.name} to dashboard`);
                 }}
               >
-                <Plus className=" dark:text-gray-200 group-hover:text-gray-200 group-hover:scale-125 transition-all" />
+                <Plus className="dark:text-gray-200 group-hover:text-gray-200 group-hover:scale-125 transition-all" />
               </Button>
             </div>
             <div className="mt-2 text-sm text-gray-600 flex justify-between items-start dark:text-gray-300">
