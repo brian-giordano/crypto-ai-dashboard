@@ -53,7 +53,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         frontend_url,  # Local frontend
-        "https://your-production-frontend-url.com",  # Production frontend
+        "https://crypto-ai-dashboard-lovat.vercel.app",  # Production frontend
     ], 
     allow_credentials=True,
     allow_methods=["*"],
