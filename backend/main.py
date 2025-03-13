@@ -1,6 +1,10 @@
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
-from transformers import pipeline
+from pydantic import BaseModel, Field
+from transformers import (
+    pipeline, 
+    AutoModelForSequenceClassification, 
+    AutoTokenizer
+)
 from fastapi.middleware.cors import CORSMiddleware
 import requests
 from typing import Dict, Any, Optional, List
@@ -18,6 +22,15 @@ from urllib.parse import urlparse
 
 # Load environment variables
 load_dotenv()
+
+# Define pydantic request model for API documentation and validation
+class SentimentRequest(BaseModel):
+    text: str = Field(..., description="Text to analyze for sentiment")
+
+class SentimentResponse(BaseModel):
+    sentiment: str
+    confidence: float
+    cached: bool = Field(default=False, description="Indicates if result was from cache")
 
 # Access environment variables
 frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
@@ -39,9 +52,13 @@ redis_client = Redis(
     decode_responses=True
 )
 
+# Configure logging
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s",
+    handlers=[
+        logging.StreamHandler()     # Logs to console (for visibility in Render.)
+    ]
 )
 
 def log_memory_usage(stage: str):
@@ -76,6 +93,7 @@ async def global_exception_handler(request, exc):
 log_memory_usage("Before initializing sentiment pipeline")
 logging.info("Initializing sentiment analysis pipeline...")
 
+# Load the model globally
 sentiment_pipeline = pipeline("sentiment-analysis", model="yiyanghkust/finbert-tone")
 
 # Log memory usage after initializing the pipeline
@@ -409,53 +427,43 @@ def get_sentiment_explanation(sentiment, confidence, coin_data=None):
 @app.post("/ask", response_model=AIResponse)
 async def process_question(request: QueryRequest):
     try:
-        question = request.question
+        start_time = time.time()
+        logging.info("Processing question...")
 
-        # Extract crypto context from question
+        # Step 1: Extract question and context
+        question = request.question
+        logging.info(f"Question: {question}")
+        step_1_time = time.time()
+        logging.info(f"Step 1 (Extract question): {step_1_time - start_time:.2f}s")
+
+        # Step 2: Fetch coin data if applicable
         crypto_context = "the cryptocurrency market"
         for coin in ["bitcoin", "btc", "ethereum", "eth", "ripple", "xrp", "cardano", "ada"]:
             if coin in question.lower():
                 crypto_context = coin
                 break
 
-        # Get real data for the mentioned crypto
         coin_data = None
         if crypto_context != "the cryptocurrency market":
             coin_data = crypto_service.get_coin_by_name(crypto_context)
+        step_2_time = time.time()
+        logging.info(f"Step 2 (Fetch coin data): {step_2_time - step_1_time:.2f}s")
 
-        # Perform sentiment analysis
+        # Step 3: Perform sentiment analysis
         sentiment_result = analyze_sentiment_with_context(question, coin_data)
-        sentiment = sentiment_result["label"]  # Already uppercase from analyze_sentiment_with_context
-        confidence = sentiment_result["score"]  # Already capped at 0.95
+        sentiment = sentiment_result["label"]
+        confidence = sentiment_result["score"]
+        step_3_time = time.time()
+        logging.info(f"Step 3 (Sentiment analysis): {step_3_time - step_2_time:.2f}s")
 
-        # Override sentiment based on price data if available
-        if coin_data and "price_change_percentage_24h" in coin_data:
-            price_change = coin_data["price_change_percentage_24h"]
-            # if the question is about price/trend and we have price data...
-            if any(term in question.lower() for term in ["price", "trend", "movement", "going up", "going down"]):
-                # Override sentiment based on actual price movement
-                if price_change > 3: # Significant positive movement
-                    sentiment = "POSITIVE"
-                    confidence = min(max(confidence, 0.8), 0.95)  # Between 0.8 and 0.95
-                elif price_change < -3: # Significant negative movement
-                    sentiment = "NEGATIVE"
-                    confidence = min(max(confidence, 0.8), 0.95)
-                elif -1 < price_change < 1: # Minimal movement
-                    sentiment = "NEUTRAL"
-                    confidence = min(max(confidence, 0.8), 0.95)
-
-        # Cap confidence for prediction questions
-        if any(term in question.lower() for term in ["predict", "forecast", "future", "next week", "tomorrow"]):
-            confidence = min(confidence, 0.7)  # Lower confidence for predictions
-
-        # Generate response based on question and data
+        # Step 4: Generate response
         response_text = generate_ai_response(question, sentiment, coin_data)
-
-        # Add sentiment explanation to the response
         sentiment_explanation = get_sentiment_explanation(sentiment, confidence, coin_data)
         response_text += f"\n\n{sentiment_explanation}"
+        step_4_time = time.time()
+        logging.info(f"Step 4 (Generate response): {step_4_time - step_3_time:.2f}s")
 
-        # Get metrics
+        # Step 5: Fetch metrics
         metrics = {}
         if coin_data:
             metrics = {
@@ -477,13 +485,22 @@ async def process_question(request: QueryRequest):
                         "change24h": f"{btc['price_change_percentage_24h']}%"
                     }
 
+        step_5_time = time.time()
+        logging.info(f"Step 5 (Fetch metrics): {step_5_time - step_4_time:.2f}s")
+
+        # Total time
+        total_time = step_5_time - start_time
+        logging.info(f"Total time for /ask endpoint: {total_time:.2f}s")
+
         return AIResponse(
             text=response_text,
             sentiment=sentiment,
             confidence=confidence,
             metrics=metrics
         )
+
     except Exception as e:
+        logging.error(f"Error in /ask endpoint: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 # Run the application with Uvicorn if this file is executed directly
