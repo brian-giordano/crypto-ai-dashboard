@@ -1,4 +1,5 @@
-from fastapi import FastAPI, HTTPException
+import sys
+from fastapi import FastAPI, HTTPException, BackgroundTasks
 from pydantic import BaseModel, Field
 from transformers import (
     pipeline, 
@@ -19,6 +20,9 @@ import json
 from redis import Redis
 from datetime import timedelta
 from urllib.parse import urlparse
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
+from contextlib import asynccontextmanager
 
 # Load environment variables
 load_dotenv()
@@ -42,7 +46,13 @@ REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
 parsed_redis_url = urlparse(REDIS_URL)
 
 # Redis Configuration
-REDIS_CACHE_TTL = 300 # 5 minutes
+REDIS_CACHE_TTL = int(os.getenv("REDIS_CACHE_TTL", 300)) # 5 minutes
+
+CACHE_TTLS = {
+    'market_data': int(os.getenv("MARKET_DATA_TTL", 300)),     # 5 minutes
+    'coin_data': int(os.getenv("COIN_DATA_TTL", 600)),       # 10 minutes
+    'sentiment': int(os.getenv("SENTIMENT_TTL", 3600))       # 1 hour
+}
 
 # Initialize Redis client
 redis_client = Redis(
@@ -52,12 +62,32 @@ redis_client = Redis(
     decode_responses=True
 )
 
+try:
+    # Test the Redis connection
+    redis_client.ping()
+    logging.info(f"Successfully connected to Redis at {parsed_redis_url.hostname}:{parsed_redis_url.port}")
+    logging.info(f"Current Redis database: {redis_client.connection_pool.connection_kwargs.get('db', 0)}")
+except Exception as e:
+    logging.error(f"Failed to connect to Redis: {e}")
+
+# Cache helper function
+def get_cache_key(prefix: str, identifier: str) -> str:
+    """Generate consistent cache keys"""
+    return f"{prefix}:{identifier.lower()}"
+
+def log_cache_status(cache_key: str, hit: bool):
+    """Log cache hits and misses"""
+    if hit:
+        logging.info(f"Cache hit for {cache_key}")
+    else: 
+        logging.info(f"Cache miss for {cache_key}")
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s",
     handlers=[
-        logging.StreamHandler()     # Logs to console (for visibility in Render.)
+        logging.StreamHandler(sys.stdout)     # Logs to console (for visibility in Render.)
     ]
 )
 
@@ -66,8 +96,31 @@ def log_memory_usage(stage: str):
     memory_info = process.memory_info()
     logging.info(f"{stage} - Memory usage: {memory_info.rss / 1024 / 1024:.2f} MB")
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Lifecycle manager for the FastAPI app"""
+    # Startup
+    logging.info("Starting application startup tasks...")
+    try:
+        # Preload market data
+        data = crypto_service.get_market_data(limit=100)
+        if data:
+            logging.info("Successfully preloaded market data")
+            logging.info(f"Preloaded data for {len(data)} cryptocurrencies")
+        else:
+            logging.warning("No market data was preloaded")
+    except Exception as e:
+        logging.error("Erorr during startup preloading: {e}")
+    
+    logging.info("Completed startup tasks")
+
+    yield # Server is running
+
+    # Shutdown
+    logging.info("Shutting down application...")
+
 # FastAPI App main
-app = FastAPI()
+app = FastAPI(lifespan=lifespan)
 
 # Add CORS middleware to allow requests from frontend
 app.add_middleware(
@@ -81,13 +134,25 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Preload market data at as app startup
+
+
+# Request timing middlewear
+class TimingMiddlewear(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        start_time = time.time()
+        response = await call_next(request)
+        process_time = time.time() - start_time
+        response.headers["X-Process-Time"] = str(process_time)
+        return response
+    
+app.add_middleware(TimingMiddlewear)
+
 # Global exception handler
 @app.exception_handler(Exception)
 async def global_exception_handler(request, exc):
     logging.error(f"Unhandled exception: {exc}")
     return {"detail": "An internal error occurred."}
-
-# Initialize the sentiment analysis pipeline, using FinBERT from HuggingFace
 
 # Log memory usage before initializing the pipeline
 log_memory_usage("Before initializing sentiment pipeline")
@@ -101,8 +166,6 @@ log_memory_usage("After initializing sentiment pipeline")
 logging.info("Sentiment analysis pipeline initialized successfully.")
 
 # Define Pydantic models
-class SentimentRequest(BaseModel):
-    text: str
 
 class QueryRequest(BaseModel):
     question: str  
@@ -132,25 +195,25 @@ class CryptoDataService:
         self.last_request_time = time.time()
 
     def get_market_data(self, vs_currency: str = "usd", limit: int = 100) -> List[Dict[str, Any]]:
-        """Get market data for top cryptocurrencies"""
-        cache_key = f"market_data_{vs_currency}_{limit}"
-
-        # Check if the cached data is still valid
-        # if cache_key in self.cache and time.time() < self.cache_expiry.get(cache_key, 0):
-        #     print(f"Using cached market data for {cache_key}")
-        #     return self.cache[cache_key]
+        """Get market data with improved caching"""
+        cache_key = get_cache_key('market_data', f"{vs_currency}_{limit}")
+        logging.info(f"Generated cache key: {cache_key}")
 
         try:
-            # Try to get data from Redis
+            # Try to get cached data from Redis first
             cached_data = self.redis_client.get(cache_key)
             if cached_data:
-                logging.info(f"Cache hit for {cache_key}")
+                log_cache_status(cache_key, True)
                 return json.loads(cached_data)
+            
+            log_cache_status(cache_key, False)
 
-            # If data is not cached, fetch from API
+            # Rate limiting
             self._rate_limit()
+
+            # Fetch from API
             params = {
-               "vs_currency": vs_currency,
+                "vs_currency": vs_currency,
                 "order": "market_cap_desc",
                 "per_page": limit,
                 "page": 1,
@@ -159,7 +222,7 @@ class CryptoDataService:
             }
             response = requests.get(f"{self.base_url}/coins/markets", params=params)
 
-            # If a rate limit is reached, return chached data if available
+            # Handle rate limiting
             if response.status_code == 429:
                 logging.warning("Rate limit reached, checking cache for stale data")
                 cached_data = self.redis_client.get(cache_key)
@@ -170,19 +233,18 @@ class CryptoDataService:
             response.raise_for_status()
             data = response.json()
 
-            # Store in Redis with TTL
+            # Cache the new data
             self.redis_client.setex(
                 cache_key,
-                self.default_ttl,
+                CACHE_TTLS['market_data'],
                 json.dumps(data)
             )
-            logging.info(f"Cached fresh market data for {cache_key}")
 
             return data
         
         except Exception as e:
             logging.error(f"Error fetching market data: {e}")
-            # Attempt to get stale data from cache
+            # Try to get stale data from cache
             cached_data = self.redis_client.get(cache_key)
             if cached_data:
                 logging.info(f"Using stale cached data for {cache_key}")
@@ -191,13 +253,7 @@ class CryptoDataService:
 
     def get_coin_by_name(self, name: str) -> Optional[Dict[str, Any]]:
         """Find a coin by name or symbol in the top 100"""
-        cache_key = f"coin:{name.lower()}"
-
-        # Check if we have cached data that's still valid
-        # if cache_key in self.cache and time.time() < self.cache_expiry.get(cache_key, 0):
-        #     print(f"Using cached coin data for {name}")
-        #     return self.cache[cache_key]
-
+        cache_key = get_cache_key('coin', name)
 
         # Try to get data from Redis
         try:
@@ -298,7 +354,7 @@ async def analyse_sentiment(request: SentimentRequest):
     return {"sentiment": result[0]["label"].upper(), "score": min(result[0]["score"], 0.95)}
 
 # Helper function to format large numbers
-def format_large_number(num):
+def format_large_number(num: float) -> str:
     """Format large numbers to K, M, B, T format"""
     if num >= 1_000_000_000_000:
         return f"{num / 1_000_000_000_000:.2f}T"
@@ -365,7 +421,22 @@ def generate_ai_response(question, sentiment, coin_data):
 
 # Context-aware sentiment analysis
 def analyze_sentiment_with_context(question, context=None):
-    """Analyze sentiment with context awareness"""
+    """Analyze sentiment with context awareness and caching"""
+    # Generate cache key
+    cache_key = get_cache_key('sentiment', question)
+
+    logging.info(f"Generated cache key for sentiment: {cache_key}")
+
+    # Check cache first
+    cached_result = redis_client.get(cache_key)
+    if cached_result:
+        log_cache_status(cache_key, True)
+        logging.info(f"Returning cached sentiment result for key: {cache_key}")
+        return json.loads(cached_result)
+    
+    log_cache_status(cache_key, False)
+    logging.info("Performing sentiment analysis...")
+    
     # Basic sentiment analysis
     result = sentiment_pipeline(question)[0]
     sentiment = result["label"].upper()  # Standardize to uppercase
@@ -389,7 +460,19 @@ def analyze_sentiment_with_context(question, context=None):
     if any(term in question.lower() for term in ["predict", "forecast", "future"]):
         confidence = min(confidence, 0.7)  # Cap confidence for predictions
 
-    return {"label": sentiment, "score": confidence}
+    # Create final result AFTER all adjustments
+    final_result = {"label": sentiment, "score": confidence}
+
+    # Cache final result
+    redis_client.setex(
+        cache_key,
+        CACHE_TTLS['sentiment'],
+        json.dumps(final_result)
+    )
+
+    logging.info(f"Cacehd sentiment for key: {cache_key}")
+
+    return final_result
 
 # Add sentiment explanation
 def get_sentiment_explanation(sentiment, confidence, coin_data=None):
