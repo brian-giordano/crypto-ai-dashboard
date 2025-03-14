@@ -274,15 +274,6 @@ class CryptoDataService:
                  None
             )
 
-            # Try partial match
-            if not coin:
-                coin = next(
-                    (coin for coin in market_data
-                     if coin["id"].lower() == name_lower
-                     or coin["symbol"].lower() == name_lower),
-                     None
-                )
-
             # Cache the results (even if None)
             self.redis_client.setex(
                 cache_key,
@@ -506,86 +497,193 @@ def get_sentiment_explanation(sentiment, confidence, coin_data=None):
     else:
         return "The market sentiment appears neutral, indicating a balance between positive and negative factors."
 
-# AI Question endpoint
+# ask endpoint (AI):    Process user questions about crypto, with sentiment analysis and market data. 
+#                       Implements caching, performance monitoring, and error handling. 
+
 @app.post("/ask", response_model=AIResponse)
 async def process_question(request: QueryRequest):
+    start_time = time.time()
+    cache_key = get_cache_key('full_response', request.question)
+    metrics = {}
+
     try:
-        start_time = time.time()
-        logging.info("Processing question...")
+        """
+        Performance monitoring metrics:
+        - Context Extraction: Time taken to identify cryptocurrency from question
+        - Data Fetching: Time taken to retrieve market/coin data (including cache checks)
+        - Sentiment Analysis: Time taken for sentiment analysis (including cache)
+        - Response Generation: Time taken to generate and format the response
+        """
+        
+        timing_metrics = {}
+        def log_step_time(step_name: str, start: float) -> float:
+            """Log the time taken for each processing step and return the end time."""
+            end = time.time()
+            duration = end - start
+            timing_metrics[step_name] = duration
+            logging.info(f"{step_name}: {duration:.2f}s")
+            return end
+        
+        # Step 1: Check cache
+        cached_response = redis_client.get(cache_key)
+        if cached_response:
+            log_cache_status(cache_key, True)
+            return AIResponse(**json.loads(cached_response))
+        log_cache_status(cache_key, False)
 
-        # Step 1: Extract question and context
-        question = request.question
-        logging.info(f"Question: {question}")
-        step_1_time = time.time()
-        logging.info(f"Step 1 (Extract question): {step_1_time - start_time:.2f}s")
-
-        # Step 2: Fetch coin data if applicable
+        # Step 2: Extract context and identify crypto
+        step_start = time.time()
+        question = request.question.lower()
         crypto_context = "the cryptocurrency market"
-        for coin in ["bitcoin", "btc", "ethereum", "eth", "ripple", "xrp", "cardano", "ada"]:
-            if coin in question.lower():
-                crypto_context = coin
+
+        # use set for O(1) lookup
+        crypto_keywords = {
+            # Bitcoin and variations
+            "bitcoin": "bitcoin", "btc": "bitcoin",
+            "wrapped bitcoin": "bitcoin",
+            "bitcoin cash": "bitcoin-cash", "bch": "bitcoin-cash",
+
+            # Ethereum and variations
+            "ethereum": "ethereum", "eth": "ethereum",
+            "lido staked ether": "ethereum", "steth": "ethereum",
+
+            # Stablecoins
+            "tether": "tether", "usdt": "tether",
+            "usdc": "usd-coin", "usd coin": "usd-coin",
+            "dai": "dai",
+            "ethena usde": "ethena-usd",
+
+            # Major altcoins
+            "cardano": "cardano", "ada": "cardano",
+            "dogecoin": "dogecoin", "doge": "dogecoin",
+            "ripple": "ripple", "xrp": "ripple",
+            "solana": "solana", "sol": "solana",
+            "polkadot": "polkadot", "dot": "polkadot",
+            "chainlink": "chainlink", "link": "chainlink",
+            "avalanche": "avalanche-2", "avax": "avalanche-2",
+            "litecoin": "litecoin", "ltc": "litecoin",
+
+            # Other notable coins
+            "tron": "tron", "trx": "tron",
+            "stellar": "stellar", "xlm": "stellar",
+            "hedera": "hedera", "hbar": "hedera",
+            "shiba inu": "shiba-inu", "shib": "shiba-inu",
+            "leo": "leo-token",
+            "mantra": "mantra-dao", "om": "mantra-dao",
+            "sui": "sui",
+            "toncoin": "the-open-network", "ton": "the-open-network",
+            "pi network": "pi-network", "pi": "pi-network"
+        }
+
+        for keyword in crypto_keywords:
+            if keyword in question:
+                crypto_context = crypto_keywords[keyword]
                 break
 
+        step_start = log_step_time("Context Extraction", step_start)
+
+        # Step 3: Parallel data fetching
+        step_start = time.time()
         coin_data = None
+        market_data = None
+
+        # Fetch both coin and market data if needed
         if crypto_context != "the cryptocurrency market":
             coin_data = crypto_service.get_coin_by_name(crypto_context)
-        step_2_time = time.time()
-        logging.info(f"Step 2 (Fetch coin data): {step_2_time - step_1_time:.2f}s")
+            if coin_data:
+                metrics = get_coin_metrics(coin_data)
+        else:
+            # Fetch market overview data for general questions
+            market_data = crypto_service.get_market_data(limit=10)
+            if market_data:
+                metrics = get_market_overview_metrics(market_data)
+            
+        step_start = log_step_time("Data Fetching", step_start)
 
-        # Step 3: Perform sentiment analysis
+        # Step 4: Sentiment Analysis
+        step_start = time.time()
         sentiment_result = analyze_sentiment_with_context(question, coin_data)
         sentiment = sentiment_result["label"]
         confidence = sentiment_result["score"]
-        step_3_time = time.time()
-        logging.info(f"Step 3 (Sentiment analysis): {step_3_time - step_2_time:.2f}s")
+        step_start = log_step_time("Sentiment Analysis", step_start)
 
-        # Step 4: Generate response
+        # Step 5: Generate Response
+        step_start = time.time()
         response_text = generate_ai_response(question, sentiment, coin_data)
         sentiment_explanation = get_sentiment_explanation(sentiment, confidence, coin_data)
         response_text += f"\n\n{sentiment_explanation}"
-        step_4_time = time.time()
-        logging.info(f"Step 4 (Generate response): {step_4_time - step_3_time:.2f}s")
+        step_start = log_step_time("Response Generation", step_start)
 
-        # Step 5: Fetch metrics
-        metrics = {}
-        if coin_data:
-            metrics = {
-                "price": f"${coin_data['current_price']}",
-                "marketCap": f"${format_large_number(coin_data['market_cap'])}",
-                "volume24h": f"${format_large_number(coin_data['total_volume'])}",
-                "change24h": f"{coin_data['price_change_percentage_24h']}%"
-            }
-        else:
-            # Use market overview data
-            market_data = crypto_service.get_market_data(limit=10)
-            if market_data:
-                btc = next((coin for coin in market_data if coin["id"] == "bitcoin"), None)
-                if btc:
-                    metrics = {
-                        "price": f"${btc['current_price']}",
-                        "marketCap": f"${format_large_number(btc['market_cap'])}",
-                        "volume24h": f"${format_large_number(btc['total_volume'])}",
-                        "change24h": f"{btc['price_change_percentage_24h']}%"
-                    }
-
-        step_5_time = time.time()
-        logging.info(f"Step 5 (Fetch metrics): {step_5_time - step_4_time:.2f}s")
-
-        # Total time
-        total_time = step_5_time - start_time
-        logging.info(f"Total time for /ask endpoint: {total_time:.2f}s")
-
-        return AIResponse(
+        # Create response object
+        response = AIResponse(
             text=response_text,
             sentiment=sentiment,
             confidence=confidence,
             metrics=metrics
         )
 
-    except Exception as e:
-        logging.error(f"Error in /ask endpoint: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        # Cache the response
+        try:
+            redis_client.setex(
+                cache_key,
+                CACHE_TTLS['sentiment'],
+                json.dumps(response.dict())
+            )
+            logging.info(f"Response cached with key: {cache_key}")
+        except Exception as e:
+            logging.warning(f"Failed to cache response: {e}")
 
+        # Log total processing time
+        total_time = time.time() - start_time
+        logging.info(f"Total processing time: {total_time:.2f}s")
+        logging.info("Step timing breakdown:")
+        for step, duration in timing_metrics.items():
+            logging.info(f"  {step}: {duration:.2f}s ({(duration/total_time)*100:.1f}%)")
+
+        return response
+    
+    except Exception as e:
+        logging.error(f"Error processing question: {str(e)}", exc_info=True)
+
+        # Attempt to serve stale cache in case of error
+        try:
+            stale_response = redis_client.get(cache_key)
+            if stale_response:
+                logging.info("Serving stale cached response due to error")
+                return AIResponse(**json.loads(stale_response))
+        except Exception as cache_error:
+            logging.error(f"Failed to retrieve stale cache: {str(cache_error)}")
+
+        # Fallback response
+        return AIResponse(
+            text="I apologize, but I'm having trouble processing your request at this time. Please try again.",
+            sentiment="NEUTRAL",
+            confidence=0.5,
+            metrics=metrics
+        )
+    
+def get_coin_metrics(coin_data: Dict[str, Any]) -> Dict[str, str]:
+    """Generate metrics for a specific cryptocurrency"""
+    return {
+        "price": f"${coin_data['current_price']}",
+        "marketCap": f"${format_large_number(coin_data['market_cap'])}",
+        "volume24h": f"${format_large_number(coin_data['total_volume'])}",
+        "change24h": f"{coin_data['price_change_percentage_24h']}%"
+    }
+
+def get_market_overview_metrics(market_data: List[Dict[str, Any]]) -> Dict[str, str]:
+    """Generate metrics for overall market overview"""
+    total_market_cap = sum(coin['market_cap'] for coin in market_data)
+    total_volume = sum(coin['total_volume'] for coin in market_data)
+    avg_change = sum(coin['price_change_percentage_24h'] for coin in market_data) / len(market_data)
+
+    return {
+        "totalMarketCap": f"${format_large_number(total_market_cap)}",
+        "totalVolume": f"${format_large_number(total_volume)}",
+        "avgChange24h": f"{avg_change:.2f}%",
+        "coinsAnalyzed": f"{len(market_data)}"
+    }
+       
 # Run the application with Uvicorn if this file is executed directly
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8000)) # Default to 8000 if port is not set
