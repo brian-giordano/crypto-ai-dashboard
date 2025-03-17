@@ -34,3 +34,8 @@ def get_market_overview_metrics(market_data: List[Dict[str, Any]]) -> Dict[str, 
         "avgChange24h": f"{avg_change:.2f}%",
         "coinsAnalyzed": f"{len(market_data)}"
     }
+
+# ensure confidence is never 100%
+def cap_confidence(confidence: float) -> float:
+        """Cap confidence scores to a maximum of 99.9%."""
+        return min(confidence, 0.999)

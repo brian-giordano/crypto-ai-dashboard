@@ -7,7 +7,7 @@ import requests
 import json
 from cache_utils import CACHE_TTLS, get_cache_key, log_cache_status
 import time
-from utils import format_large_number
+from utils import format_large_number, cap_confidence
 
 CRYPTO_KEYWORDS = {
             # Bitcoin and variations
@@ -217,7 +217,6 @@ class CryptoDataService:
             else:
                 return "Based on current market data, cryptocurrencies are showing mixed performance. For specific insights, try asking about a particular coin or market metric."
 
-
 class SentimentAnalyzer:
     def __init__(self, redis_client: Redis):
         self.redis_client = redis_client
@@ -235,36 +234,53 @@ class SentimentAnalyzer:
 
         log_cache_status(cache_key, False)
         result = self.sentiment_pipeline(question)[0]
+
+        # Adjust sentiment based on context if provided
+        if context and 'price_change_24h' in context:
+            price_change = context['price_change_24h']
+            if (result['label'] == 'POSITIVE' and price_change > 0) or \
+                (result['label'] == 'NEGATIVE' and price_change < 0):
+                result['score'] = min(result['score'] * 1.1, 0.95)  # Boost confidence if aligned
+
         self.redis_client.setex(cache_key, CACHE_TTLS['sentiment'],
                                 json.dumps(result))
         return result
-    
+
     def get_sentiment_explanation(self, sentiment: str, confidence: float,
                                 coin_data: Optional[Dict[str, Any]] = None) -> str:
         """Generate an explanation for the sentiment analysis result"""
+        confidence = cap_confidence(confidence)
         sentiment_lower = sentiment.lower()
+
+        # Confidence levels
+        confidence_desc = "strongly" if confidence > 0.8 else \
+                          "moderately" if confidence > 0.6 else \
+                          "slightly"
 
         if not coin_data:
             if sentiment_lower == "positive":
-                return "The sentiment appears positive based on the optimistic language in your question."
+                return f"The sentiment appears {confidence_desc} positive ({confidence:.1%} confidence) based on the optimistic language in your question."
             elif sentiment_lower == "negative":
-                return "The sentiment appears negative based on the cautious language in your question."
+                return f"The sentiment appears {confidence_desc} negative ({confidence:.1%} confidence) based on the cautious language in your question."
             else:
-                return "The sentiment appears neutral based on the balanced language in your question."
+                return f"The sentiment appears neutral ({confidence:.1%} confidence) based on the balanced language in your question."
 
         price_change = coin_data.get("price_change_percentage_24h", 0)
 
         if sentiment_lower == "positive":
             if price_change > 0:
-                return f"The sentiment is positive, supported by the {price_change:.2f}% price increase in the last 24 hours."
+                return f"The sentiment is {confidence_desc} positive ({confidence:.1%} confidence), supported by the {price_change:.2f}% price increase in the last 24 hours."
             else:
-                return "Despite recent price movements, the overall sentiment remains positive based on market indicators."
+                return f"Despite the {abs(price_change):.2f}% price decrease, the sentiment remains {confidence_desc} positive ({confidence:.1%} confidence) based on market indicators."
 
         elif sentiment_lower == "negative":
             if price_change < 0:
-                return f"The sentiment is negative, reflecting the {abs(price_change):.2f}% price decrease in the last 24 hours."
+                return f"The sentiment is {confidence_desc} negative ({confidence:.1%} confidence), reflecting the {abs(price_change):.2f}% price decrease in the last 24 hours."
             else:
-                return "Despite recent positive price movement, there are concerns in the market leading to a negative sentiment."
+                return f"Despite the {price_change:.2f}% price increase, the sentiment is {confidence_desc} negative ({confidence:.1%} confidence) based on market concerns."
 
         else:  # neutral
-            return "The market sentiment appears neutral, indicating a balance between positive and negative factors."
+            if abs(price_change) < 2:
+                return f"The market sentiment appears neutral ({confidence:.1%} confidence), with relatively stable price movement ({price_change:.2f}%)."
+            else:
+                return f"Despite {abs(price_change):.2f}% price {'increase' if price_change > 0 else 'decrease'}, the overall sentiment remains neutral ({confidence:.1%} confidence)."

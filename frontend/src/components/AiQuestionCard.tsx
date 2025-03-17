@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { Sparkles } from "lucide-react";
 import { Button } from "./ui/button";
 import { useQuery } from "@tanstack/react-query";
+import AnimatedResponse from "./AnimatedResponse";
 
 interface AIResponse {
   text: string;
@@ -169,7 +170,7 @@ const AiQuestionCard: React.FC = () => {
         {response && (
           <div className="mt-4 p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
             <p className="mb-4 text-gray-800 dark:text-gray-200">
-              {response.text}
+              <AnimatedResponse text={response.text} />
             </p>
 
             {response.sentiment && (
@@ -181,14 +182,17 @@ const AiQuestionCard: React.FC = () => {
                   className={`font-medium ${
                     response.sentiment.toUpperCase() === "POSITIVE"
                       ? "text-green-500"
-                      : "text-red-500"
+                      : response.sentiment.toUpperCase() === "NEGATIVE"
+                      ? "text-red-500"
+                      : "text-gray-500"
                   }`}
                 >
                   {response.sentiment}
                 </span>
                 {response.confidence && (
                   <span className="text-gray-500 dark:text-gray-400 ml-2">
-                    (Confidence: {Math.round(response.confidence * 100)}%)
+                    (Confidence:{" "}
+                    {Math.min(Math.round(response.confidence * 100), 99.9)}%)
                   </span>
                 )}
               </div>

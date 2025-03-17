@@ -9,8 +9,11 @@ import logging
 import os
 import sys
 import time
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from urllib.parse import urlparse
+from contextlib import contextmanager
+from dataclasses import dataclass
+
 
 # Third-party imports
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Request
@@ -19,6 +22,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 import uvicorn
 from redis import Redis
 from dotenv import load_dotenv
+
 
 # Local imports
 from services import CryptoDataService, SentimentAnalyzer, CRYPTO_KEYWORDS
@@ -35,6 +39,44 @@ load_dotenv()
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
 PRODUCTION_URL = "https://crypto-ai-dashboard-lovat.vercel.app"
+
+# For timing process logs
+@dataclass
+class StepTiming:
+    name: str
+    start: float
+    duration: Optional[float] = None
+
+class ProcessingTimer:
+    def __init__(self):
+        self.start_time = time.perf_counter()
+        self.steps: Dict[str, StepTiming] = {}
+
+    @contextmanager
+    def step(self, name: str):
+        step_start = time.perf_counter()
+        try:
+            yield
+        finally:
+            duration = time.perf_counter() - step_start
+            self.steps[name] = StepTiming(name, step_start, duration)
+
+    def log_summary(self):
+        total_time = time.perf_counter() - self.start_time
+        logging.info(f"Total processing time: {total_time:.3f}s")
+        logging.info("Step timing breakdown:")
+
+        for step in self.steps.values():
+            step.percentage = (step.duration / total_time) * 100
+            logging.info(
+                f"  {step.name}: {step.duration:.3f}s ({step.percentage:.1f}%)"
+            )
+
+        return {
+            'total_time': total_time,
+            'steps': {name: step.duration for name, step in self.steps.items()}
+        }
+
 
 # Configure logging
 logging.basicConfig(
@@ -248,9 +290,10 @@ async def process_question(request: QueryRequest) -> AIResponse:
     Returns:
         AIResponse: Generated response with sentiment analysis and metrics
     """
-    start_time = time.time()
-    cache_key = get_cache_key('full_response', request.question)
+    timer = ProcessingTimer()
     metrics = {}
+    coin_data = None
+    market_data = None
 
     try:
         """
@@ -260,92 +303,76 @@ async def process_question(request: QueryRequest) -> AIResponse:
         - Sentiment Analysis: Time taken for sentiment analysis (including cache)
         - Response Generation: Time taken to generate and format the response
         """
-        
-        timing_metrics = {}
-        def log_step_time(step_name: str, start: float) -> float:
-            """Log the time taken for each processing step and return the end time."""
-            end = time.time()
-            duration = end - start
-            timing_metrics[step_name] = duration
-            logging.info(f"{step_name}: {duration:.2f}s")
-            return end
+        cache_key = get_cache_key('full_response', request.question)
         
         # Step 1: Check cache
-        cached_response = redis_client.get(cache_key)
-        if cached_response:
-            log_cache_status(cache_key, True)
-            return AIResponse(**json.loads(cached_response))
-        log_cache_status(cache_key, False)
+        with timer.step("Cache Check"):
+            cached_response = redis_client.get(cache_key)
+            if cached_response:
+                log_cache_status(cache_key, True)
+                return AIResponse(**json.loads(cached_response))
+            log_cache_status(cache_key, False)
 
         # Step 2: Extract context and identify crypto
-        step_start = time.time()
-        question = request.question.lower()
-        crypto_context = "the cryptocurrency market"
+        with timer.step("Context Extraction"):
+            question = request.question.lower()
+            crypto_context = "the cryptocurrency market"
 
-        for keyword in CRYPTO_KEYWORDS:
-            if keyword in question:
-                crypto_context = CRYPTO_KEYWORDS[keyword]
-                break
-
-        step_start = log_step_time("Context Extraction", step_start)
+            for keyword in CRYPTO_KEYWORDS:
+                if keyword in question:
+                    crypto_context = CRYPTO_KEYWORDS[keyword]
+                    break
 
         # Step 3: Parallel data fetching
-        step_start = time.time()
-        coin_data = None
-        market_data = None
-
-        # Fetch both coin and market data if needed
-        if crypto_context != "the cryptocurrency market":
-            coin_data = crypto_service.get_coin_by_name(crypto_context)
-            if coin_data:
-                metrics = get_coin_metrics(coin_data)
-        else:
-            # Fetch market overview data for general questions
-            market_data = crypto_service.get_market_data(limit=10)
-            if market_data:
-                metrics = get_market_overview_metrics(market_data)
-            
-        step_start = log_step_time("Data Fetching", step_start)
+        with timer.step("Data Fetching"):
+            # Fetch both coin and market data if needed
+            if crypto_context != "the cryptocurrency market":
+                coin_data = crypto_service.get_coin_by_name(crypto_context)
+                if coin_data:
+                    metrics = get_coin_metrics(coin_data)
+            else:
+                # Fetch market overview data for general questions
+                market_data = crypto_service.get_market_data(limit=10)
+                if market_data:
+                    metrics = get_market_overview_metrics(market_data)
 
         # Step 4: Sentiment Analysis
-        step_start = time.time()
-        sentiment_result = sentiment_analyzer.analyze_sentiment_with_context(question, coin_data)
-        sentiment = sentiment_result["label"]
-        confidence = sentiment_result["score"]
-        step_start = log_step_time("Sentiment Analysis", step_start)
+        with timer.step("Sentiment Analysis"):
+            sentiment_result = sentiment_analyzer.analyze_sentiment_with_context(
+                question, 
+                context=coin_data if coin_data else None
+                )
+            sentiment = sentiment_result["label"]
+            confidence = sentiment_result["score"]
 
         # Step 5: Generate Response
-        step_start = time.time()
-        response_text = crypto_service.generate_ai_response(question, sentiment, coin_data)
-        sentiment_explanation = sentiment_analyzer.get_sentiment_explanation(sentiment, confidence, coin_data)
-        response_text += f"\n\n{sentiment_explanation}"
-        step_start = log_step_time("Response Generation", step_start)
+        with timer.step("Response Generation"):
+            response_text = crypto_service.generate_ai_response(question, sentiment, coin_data)
+            sentiment_explanation = sentiment_analyzer.get_sentiment_explanation(sentiment, confidence, coin_data)
+            response_text += f"\n\n{sentiment_explanation}"
 
         # Create response object
-        response = AIResponse(
-            text=response_text,
-            sentiment=sentiment,
-            confidence=confidence,
-            metrics=metrics
-        )
-
-        # Cache the response
-        try:
-            redis_client.setex(
-                cache_key,
-                CACHE_TTLS['sentiment'],
-                json.dumps(response.model_dump())
+        with timer.step("Response Caching"):
+            response = AIResponse(
+                text=response_text,
+                sentiment=sentiment,
+                confidence=confidence,
+                metrics=metrics
             )
-            logging.info(f"Response cached with key: {cache_key}")
-        except Exception as e:
-            logging.warning(f"Failed to cache response: {e}")
+
+            # Cache the response
+            try:
+                redis_client.setex(
+                    cache_key,
+                    CACHE_TTLS['sentiment'],
+                    json.dumps(response.model_dump())
+                )
+                logging.info(f"Response cached with key: {cache_key}")
+            except Exception as e:
+                logging.warning(f"Failed to cache response: {e}")
 
         # Log total processing time
-        total_time = time.time() - start_time
-        logging.info(f"Total processing time: {total_time:.2f}s")
-        logging.info("Step timing breakdown:")
-        for step, duration in timing_metrics.items():
-            logging.info(f"  {step}: {duration:.2f}s ({(duration/total_time)*100:.1f}%)")
+        timing_metrics = timer.log_summary()
 
         return response
     
