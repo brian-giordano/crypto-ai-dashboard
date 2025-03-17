@@ -1,86 +1,40 @@
-import sys
-from fastapi import FastAPI, HTTPException, BackgroundTasks
-from pydantic import BaseModel, Field
-from transformers import (
-    pipeline, 
-    AutoModelForSequenceClassification, 
-    AutoTokenizer
-)
-from fastapi.middleware.cors import CORSMiddleware
-import requests
-from typing import Dict, Any, Optional, List
-import time
-from functools import lru_cache
-import os
-import uvicorn
-import logging
-import psutil
-from dotenv import load_dotenv
+# main.py:  - use WebSockets to provide real-time updates to the client
+#           - use Celery to offload long-running tasks like AI processing and sentiment analysis
+#           - use Redis as both a caching layer and the Celery broker/backend
+
+# Standard imports
+import asyncio
 import json
-from redis import Redis
-from datetime import timedelta
+import logging
+import os
+import sys
+import time
+from typing import Dict, Any, List
 from urllib.parse import urlparse
+
+# Third-party imports
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.requests import Request
-from contextlib import asynccontextmanager
+import uvicorn
+from redis import Redis
+from dotenv import load_dotenv
+
+# Local imports
+from services import CryptoDataService, SentimentAnalyzer, CRYPTO_KEYWORDS
+from shared_types import QueryRequest, AIResponse
+from cache_utils import CACHE_TTLS, get_cache_key, log_cache_status
+from celery_worker import process_question_task
+from monitoring import log_memory_usage
+from utils import format_large_number, get_coin_metrics, get_market_overview_metrics
 
 # Load environment variables
 load_dotenv()
 
-# Define pydantic request model for API documentation and validation
-class SentimentRequest(BaseModel):
-    text: str = Field(..., description="Text to analyze for sentiment")
-
-class SentimentResponse(BaseModel):
-    sentiment: str
-    confidence: float
-    cached: bool = Field(default=False, description="Indicates if result was from cache")
-
-# Access environment variables
-frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
-
-# Load Redis URL from environment variables
+# Configuration
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
-
-# Parse the Redis URL
-parsed_redis_url = urlparse(REDIS_URL)
-
-# Redis Configuration
-REDIS_CACHE_TTL = int(os.getenv("REDIS_CACHE_TTL", 300)) # 5 minutes
-
-CACHE_TTLS = {
-    'market_data': int(os.getenv("MARKET_DATA_TTL", 300)),     # 5 minutes
-    'coin_data': int(os.getenv("COIN_DATA_TTL", 600)),       # 10 minutes
-    'sentiment': int(os.getenv("SENTIMENT_TTL", 3600))       # 1 hour
-}
-
-# Initialize Redis client
-redis_client = Redis(
-    host=parsed_redis_url.hostname,
-    port=parsed_redis_url.port,
-    password=parsed_redis_url.password,
-    decode_responses=True
-)
-
-try:
-    # Test the Redis connection
-    redis_client.ping()
-    logging.info(f"Successfully connected to Redis at {parsed_redis_url.hostname}:{parsed_redis_url.port}")
-    logging.info(f"Current Redis database: {redis_client.connection_pool.connection_kwargs.get('db', 0)}")
-except Exception as e:
-    logging.error(f"Failed to connect to Redis: {e}")
-
-# Cache helper function
-def get_cache_key(prefix: str, identifier: str) -> str:
-    """Generate consistent cache keys"""
-    return f"{prefix}:{identifier.lower()}"
-
-def log_cache_status(cache_key: str, hit: bool):
-    """Log cache hits and misses"""
-    if hit:
-        logging.info(f"Cache hit for {cache_key}")
-    else: 
-        logging.info(f"Cache miss for {cache_key}")
+PRODUCTION_URL = "https://crypto-ai-dashboard-lovat.vercel.app"
 
 # Configure logging
 logging.basicConfig(
@@ -91,54 +45,40 @@ logging.basicConfig(
     ]
 )
 
-def log_memory_usage(stage: str):
-    process = psutil.Process(os.getpid())
-    memory_info = process.memory_info()
-    logging.info(f"{stage} - Memory usage: {memory_info.rss / 1024 / 1024:.2f} MB")
+# Parse the Redis URL and initialize client
+parsed_redis_url = urlparse(REDIS_URL)
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """Lifecycle manager for the FastAPI app"""
-    # Startup
-    logging.info("Starting application startup tasks...")
-    try:
-        # Preload market data
-        data = crypto_service.get_market_data(limit=100)
-        if data:
-            logging.info("Successfully preloaded market data")
-            logging.info(f"Preloaded data for {len(data)} cryptocurrencies")
-        else:
-            logging.warning("No market data was preloaded")
-    except Exception as e:
-        logging.error("Erorr during startup preloading: {e}")
-    
-    logging.info("Completed startup tasks")
+redis_client = Redis(
+    host=parsed_redis_url.hostname,
+    port=parsed_redis_url.port,
+    password=parsed_redis_url.password,
+    decode_responses=True
+)
 
-    yield # Server is running
-
-    # Shutdown
-    logging.info("Shutting down application...")
+# Test Redis connection
+try:
+    redis_client.ping()
+    logging.info(f"Successfully connected to Redis at {parsed_redis_url.hostname}:{parsed_redis_url.port}")
+except Exception as e:
+    logging.error(f"Failed to connect to Redis: {e}")
 
 # FastAPI App main
-app = FastAPI(lifespan=lifespan)
+app = FastAPI()
 
 # Add CORS middleware to allow requests from frontend
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        frontend_url,  # Local frontend
-        "https://crypto-ai-dashboard-lovat.vercel.app",  # Production frontend
+        FRONTEND_URL,
+        PRODUCTION_URL,
     ], 
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Preload market data at as app startup
-
-
 # Request timing middlewear
-class TimingMiddlewear(BaseHTTPMiddleware):
+class TimingMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         start_time = time.time()
         response = await call_next(request)
@@ -146,7 +86,7 @@ class TimingMiddlewear(BaseHTTPMiddleware):
         response.headers["X-Process-Time"] = str(process_time)
         return response
     
-app.add_middleware(TimingMiddlewear)
+app.add_middleware(TimingMiddleware)
 
 # Global exception handler
 @app.exception_handler(Exception)
@@ -154,145 +94,11 @@ async def global_exception_handler(request, exc):
     logging.error(f"Unhandled exception: {exc}")
     return {"detail": "An internal error occurred."}
 
-# Log memory usage before initializing the pipeline
-log_memory_usage("Before initializing sentiment pipeline")
-logging.info("Initializing sentiment analysis pipeline...")
-
-# Load the model globally
-sentiment_pipeline = pipeline("sentiment-analysis", model="yiyanghkust/finbert-tone")
-
-# Log memory usage after initializing the pipeline
-log_memory_usage("After initializing sentiment pipeline")
-logging.info("Sentiment analysis pipeline initialized successfully.")
-
-# Define Pydantic models
-
-class QueryRequest(BaseModel):
-    question: str  
-    context: Dict[str, Any] = None  # Optional context like selected crypto
-
-class AIResponse(BaseModel):
-    text: str
-    sentiment: str = None
-    confidence: float = None
-    metrics: Dict[str, str] = None
-
-# CoinGecko API Service
-class CryptoDataService:
-    def __init__(self):
-        self.base_url = "https://api.coingecko.com/api/v3"
-        self.last_request_time = 0
-        self.min_request_interval = 2
-        self.redis_client = redis_client
-        self.default_ttl = REDIS_CACHE_TTL
-
-    def _rate_limit(self):
-        """Ensure rate limits arent exceeded"""
-        current_time = time.time()
-        time_since_last = current_time - self.last_request_time
-        if time_since_last < self.min_request_interval:
-            time.sleep(self.min_request_interval - time_since_last)
-        self.last_request_time = time.time()
-
-    def get_market_data(self, vs_currency: str = "usd", limit: int = 100) -> List[Dict[str, Any]]:
-        """Get market data with improved caching"""
-        cache_key = get_cache_key('market_data', f"{vs_currency}_{limit}")
-        logging.info(f"Generated cache key: {cache_key}")
-
-        try:
-            # Try to get cached data from Redis first
-            cached_data = self.redis_client.get(cache_key)
-            if cached_data:
-                log_cache_status(cache_key, True)
-                return json.loads(cached_data)
-            
-            log_cache_status(cache_key, False)
-
-            # Rate limiting
-            self._rate_limit()
-
-            # Fetch from API
-            params = {
-                "vs_currency": vs_currency,
-                "order": "market_cap_desc",
-                "per_page": limit,
-                "page": 1,
-                "sparkline": "true",
-                "price_change_percentage": "24h"
-            }
-            response = requests.get(f"{self.base_url}/coins/markets", params=params)
-
-            # Handle rate limiting
-            if response.status_code == 429:
-                logging.warning("Rate limit reached, checking cache for stale data")
-                cached_data = self.redis_client.get(cache_key)
-                if cached_data:
-                    return json.loads(cached_data)
-                return []
-
-            response.raise_for_status()
-            data = response.json()
-
-            # Cache the new data
-            self.redis_client.setex(
-                cache_key,
-                CACHE_TTLS['market_data'],
-                json.dumps(data)
-            )
-
-            return data
-        
-        except Exception as e:
-            logging.error(f"Error fetching market data: {e}")
-            # Try to get stale data from cache
-            cached_data = self.redis_client.get(cache_key)
-            if cached_data:
-                logging.info(f"Using stale cached data for {cache_key}")
-                return json.loads(cached_data)
-            return []
-
-    def get_coin_by_name(self, name: str) -> Optional[Dict[str, Any]]:
-        """Find a coin by name or symbol in the top 100"""
-        cache_key = get_cache_key('coin', name)
-
-        # Try to get data from Redis
-        try:
-            cached_data = self.redis_client.get(cache_key)
-            if cached_data:
-                logging.info(f"Cache hit for coin {name}")
-                return json.loads(cached_data)
-
-            # If not in cache, search in market data
-            market_data = self.get_market_data(limit=100)
-            name_lower = name.lower()
-
-            # Try exact match
-            coin = next(
-                (coin for coin in market_data
-                 if coin["id"].lower() == name_lower
-                 or coin["symbol"].lower() == name_lower),
-                 None
-            )
-
-            # Cache the results (even if None)
-            self.redis_client.setex(
-                cache_key,
-                self.default_ttl,
-                json.dumps(coin) if coin else "null"
-            )
-
-            return coin
-            
-        except Exception as e:
-            logging.error(f"Error finding coin: {e}")
-            # Try to get stale data from cache
-            cached_data = self.redis_client.get(cache_key)
-            if cached_data and cached_data != "null":
-                return json.loads(cached_data)
-            return None
-
 # Initialize the crypto data service
-crypto_service = CryptoDataService()
+crypto_service = CryptoDataService(redis_client)
+
+# Initialize sentiment analyzer
+sentiment_analyzer = SentimentAnalyzer(redis_client)
 
 # Basic route
 @app.get("/")
@@ -335,173 +141,113 @@ async def get_crypto_data():
             status_code=500,
             detail=str(e)
         )
+    
+# WebSocket connection manager
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections: Dict[str, WebSocket] = {}
+
+    async def connect(self, websocket: WebSocket, client_id: str):
+        await websocket.accept()
+        self.active_connections[client_id] = websocket
+        logging.info(f"Client {client_id} connected")
+
+    def disconnect(self, client_id: str):
+        if client_id in self.active_connections:
+            del self.active_connections[client_id]
+            logging.info(f"Client {client_id} disconnected")
+
+    async def send_message(self, client_id: str, message: dict):
+        if client_id in self.active_connections:
+            try:
+                await self.active_connections[client_id].send_json(message)
+                logging.info(f"Message sent to client {client_id}")
+            except Exception as e:
+                logging.error(f"Error sending message to client {client_id}: {e}")
+                await self.disconnect(client_id)
+
+manager = ConnectionManager()
+
+@app.websocket("/ws/{client_id}")
+async def websocket_endpoint(websocket: WebSocket, client_id: str):
+    await manager.connect(websocket, client_id)
+    try:
+        while True:
+            # Wait for messages from client
+            data = await websocket.receive_text()
+
+            # Process the received data
+            try:
+                # Parse the question
+                request_data = json.loads(data)
+
+                # Send processing status
+                await manager.send_message(client_id, {
+                    "status": "processing",
+                    "message": "Processing your questions..."
+                })
+
+                # Start the Celery task to process the question
+                task = process_question_task.delay(request_data)
+
+                # Poll the task status and send updates to the client
+                while not task.ready():
+                    await asyncio.sleep(1)              # Avoid blocking the event loop
+                    await manager.send_message(client_id, {
+                        "status": "processing",
+                        "message": "Still processing..."
+                    })
+
+                # Handle the task result
+                if task.successful():
+                    result = task.get()                 # Retrieve the result from Celery
+
+                    await manager.send_message(client_id, {
+                        "status": "complete",
+                        "response": result,
+                    })
+                else:
+                    # Handle task failure
+                    await manager.send_message(client_id, {
+                        "status": "error",
+                        "message": "Failed to process your question."
+                    })
+
+            except Exception as e:
+                logging.error(f"Error processing message: {e}")
+                await manager.send_message(client_id, {
+                    "status": "error",
+                    "message": str(e)
+                })
+
+    except WebSocketDisconnect:
+        manager.disconnect(client_id)
+    except Exception as e:
+        logging.error(f"Websocket error: {e}")
+        manager.disconnect(client_id)
 
 # Sentiment analysis endpoint
 @app.post("/analyze-sentiment/")
-async def analyse_sentiment(request: SentimentRequest):
-    logging.info(f"Received sentiment analysis request: {request.text}")
-    result = sentiment_pipeline(request.text)
+async def analyse_sentiment(request: QueryRequest):
+    logging.info(f"Received sentiment analysis request: {request.question}")
+    result = sentiment_analyzer.analyze_sentiment_with_context(request.question)
     logging.info(f"Sentiment analysis result: {result}")
-    return {"sentiment": result[0]["label"].upper(), "score": min(result[0]["score"], 0.95)}
-
-# Helper function to format large numbers
-def format_large_number(num: float) -> str:
-    """Format large numbers to K, M, B, T format"""
-    if num >= 1_000_000_000_000:
-        return f"{num / 1_000_000_000_000:.2f}T"
-    elif num >= 1_000_000_000:
-        return f"{num / 1_000_000_000:.2f}B"
-    elif num >= 1_000_000:
-        return f"{num / 1_000_000:.2f}M"
-    elif num >= 1_000:
-        return f"{num / 1_000:.2f}K"
-    return f"{num:.2f}"
-
-def generate_ai_response(question, sentiment, coin_data):
-    """Generate a response based on the question and data"""
-    question_lower = question.lower()
-
-    # Extract key terms from the question
-    key_terms = []
-    for term in ["price", "trend", "market cap", "volume", "prediction", "future", "sentiment"]:
-        if term in question_lower:
-            key_terms.append(term)
-
-    if coin_data:
-        coin_name = coin_data["name"]
-        price_change = coin_data["price_change_percentage_24h"]
-        price_direction = "up" if price_change > 0 else "down"
-
-        if "price" in key_terms or "trend" in key_terms:
-            sentiment_desc = ""
-            if price_change > 5:
-                sentiment_desc = "showing strong bullish momentum"
-            elif price_change > 2:
-                sentiment_desc = "trending positively"
-            elif price_change < -5:
-                sentiment_desc = "showing significant bearish pressure"
-            elif price_change < -2:
-                sentiment_desc = "trending negatively"
-            else:
-                sentiment_desc = "relatively stable"
-
-            return f"{coin_name} is {sentiment_desc}, moving {price_direction} {abs(price_change):.2f}% in the last 24 hours. The current price is ${coin_data['current_price']}."
-
-        elif "predict" in question_lower or "forecast" in question_lower:
-            return f"While I can't predict prices with certainty, {coin_name} has moved {price_direction} {abs(price_change):.2f}% in the last 24 hours with a trading volume of ${format_large_number(coin_data['total_volume'])}."
-
-        else:
-            return f"{coin_name} currently has a market cap of ${format_large_number(coin_data['market_cap'])} and is trading at ${coin_data['current_price']}. In the last 24 hours, the price has changed by {price_change:.2f}%."
-
-    else:
-        # General market response
-        if "top" in question_lower and any(num in question_lower for num in ["5", "10", "five", "ten"]):
-            market_data = crypto_service.get_market_data(limit=5)
-            coins = [f"{i+1}. {coin['name']} (${coin['current_price']})" for i, coin in enumerate(market_data[:5])]
-            return f"The top 5 cryptos by market cap are: \n" + "\n".join(coins)
-
-        elif "sentiment" in question_lower or "market" in question_lower:
-            market_data = crypto_service.get_market_data(limit=10)
-            positive_count = sum(1 for coin in market_data if coin["price_change_percentage_24h"] > 0)
-            sentiment = "bullish" if positive_count > 5 else "bearish"
-            return f"The overall market sentiment appears to be {sentiment}. {positive_count} of the top 10 cryptocurrencies are showing positive price movement in the last 24 hours."
-
-        else:
-            return "Based on current market data, cryptocurrencies are showing mixed performance. For specific insights, try asking about a particular coin or market metric."
-
-
-# Context-aware sentiment analysis
-def analyze_sentiment_with_context(question, context=None):
-    """Analyze sentiment with context awareness and caching"""
-    # Generate cache key
-    cache_key = get_cache_key('sentiment', question)
-
-    logging.info(f"Generated cache key for sentiment: {cache_key}")
-
-    # Check cache first
-    cached_result = redis_client.get(cache_key)
-    if cached_result:
-        log_cache_status(cache_key, True)
-        logging.info(f"Returning cached sentiment result for key: {cache_key}")
-        return json.loads(cached_result)
-    
-    log_cache_status(cache_key, False)
-    logging.info("Performing sentiment analysis...")
-    
-    # Basic sentiment analysis
-    result = sentiment_pipeline(question)[0]
-    sentiment = result["label"].upper()  # Standardize to uppercase
-    confidence = min(result["score"], 0.95)  # Cap at 95%
-
-    # Context-aware adjustments
-    if context and isinstance(context, dict) and "price_change_percentage_24h" in context:
-        price_change = context["price_change_percentage_24h"]
-
-        # If question contains positive terms but price is down significantly
-        if sentiment == "POSITIVE" and price_change < -5 and any(term in question.lower() for term in ["price", "trend", "going up"]):
-            sentiment = "NEGATIVE"  # Override to negative
-            confidence = min(confidence, 0.8)  # Cap confidence
-
-        # If question contains negative terms but price is up significantly
-        elif sentiment == "NEGATIVE" and price_change > 5 and any(term in question.lower() for term in ["price", "trend", "going down"]):
-            sentiment = "POSITIVE"  # Override to positive
-            confidence = min(confidence, 0.8)  # Cap confidence
-
-    # For prediction questions, reduce confidence
-    if any(term in question.lower() for term in ["predict", "forecast", "future"]):
-        confidence = min(confidence, 0.7)  # Cap confidence for predictions
-
-    # Create final result AFTER all adjustments
-    final_result = {"label": sentiment, "score": confidence}
-
-    # Cache final result
-    redis_client.setex(
-        cache_key,
-        CACHE_TTLS['sentiment'],
-        json.dumps(final_result)
-    )
-
-    logging.info(f"Cacehd sentiment for key: {cache_key}")
-
-    return final_result
-
-# Add sentiment explanation
-def get_sentiment_explanation(sentiment, confidence, coin_data=None):
-    """Generate an explanation for the sentiment"""
-    # Convert sentiment to lowercase for comparison
-    sentiment_lower = sentiment.lower()
-
-    if not coin_data:
-        if sentiment_lower == "positive":
-            return "The sentiment appears positive based on the optimistic language in your question."
-        elif sentiment_lower == "negative":
-            return "The sentiment appears negative based on the cautious language in your question."
-        else:
-            return "The sentiment appears neutral based on the balanced language in your question."
-
-    # With coin data
-    price_change = coin_data.get("price_change_percentage_24h", 0)
-
-    if sentiment_lower == "positive":
-        if price_change > 0:
-            return f"The sentiment is positive due to the {price_change:.2f}% price increase in the last 24 hours."
-        else:
-            return "Despite the recent price movement, the overall sentiment remains positive based on market indicators."
-
-    elif sentiment_lower == "negative":
-        if price_change < 0:
-            return f"The sentiment is negative due to the {abs(price_change):.2f}% price decrease in the last 24 hours."
-        else:
-            return "Despite the recent positive price movement, there are concerns in the market leading to a negative sentiment."
-
-    else:
-        return "The market sentiment appears neutral, indicating a balance between positive and negative factors."
+    return {"sentiment": result["label"].upper(), "score": min(result["score"], 0.95)}
 
 # ask endpoint (AI):    Process user questions about crypto, with sentiment analysis and market data. 
 #                       Implements caching, performance monitoring, and error handling. 
 
 @app.post("/ask", response_model=AIResponse)
-async def process_question(request: QueryRequest):
+async def process_question(request: QueryRequest) -> AIResponse:
+    """
+    Process a user's question about cryptocurrency with sentiment analysis and market data.
+
+    Parameters:
+        request (QueryRequest): The question and optional context
+
+    Returns:
+        AIResponse: Generated response with sentiment analysis and metrics
+    """
     start_time = time.time()
     cache_key = get_cache_key('full_response', request.question)
     metrics = {}
@@ -536,48 +282,9 @@ async def process_question(request: QueryRequest):
         question = request.question.lower()
         crypto_context = "the cryptocurrency market"
 
-        # use set for O(1) lookup
-        crypto_keywords = {
-            # Bitcoin and variations
-            "bitcoin": "bitcoin", "btc": "bitcoin",
-            "wrapped bitcoin": "bitcoin",
-            "bitcoin cash": "bitcoin-cash", "bch": "bitcoin-cash",
-
-            # Ethereum and variations
-            "ethereum": "ethereum", "eth": "ethereum",
-            "lido staked ether": "ethereum", "steth": "ethereum",
-
-            # Stablecoins
-            "tether": "tether", "usdt": "tether",
-            "usdc": "usd-coin", "usd coin": "usd-coin",
-            "dai": "dai",
-            "ethena usde": "ethena-usd",
-
-            # Major altcoins
-            "cardano": "cardano", "ada": "cardano",
-            "dogecoin": "dogecoin", "doge": "dogecoin",
-            "ripple": "ripple", "xrp": "ripple",
-            "solana": "solana", "sol": "solana",
-            "polkadot": "polkadot", "dot": "polkadot",
-            "chainlink": "chainlink", "link": "chainlink",
-            "avalanche": "avalanche-2", "avax": "avalanche-2",
-            "litecoin": "litecoin", "ltc": "litecoin",
-
-            # Other notable coins
-            "tron": "tron", "trx": "tron",
-            "stellar": "stellar", "xlm": "stellar",
-            "hedera": "hedera", "hbar": "hedera",
-            "shiba inu": "shiba-inu", "shib": "shiba-inu",
-            "leo": "leo-token",
-            "mantra": "mantra-dao", "om": "mantra-dao",
-            "sui": "sui",
-            "toncoin": "the-open-network", "ton": "the-open-network",
-            "pi network": "pi-network", "pi": "pi-network"
-        }
-
-        for keyword in crypto_keywords:
+        for keyword in CRYPTO_KEYWORDS:
             if keyword in question:
-                crypto_context = crypto_keywords[keyword]
+                crypto_context = CRYPTO_KEYWORDS[keyword]
                 break
 
         step_start = log_step_time("Context Extraction", step_start)
@@ -602,15 +309,15 @@ async def process_question(request: QueryRequest):
 
         # Step 4: Sentiment Analysis
         step_start = time.time()
-        sentiment_result = analyze_sentiment_with_context(question, coin_data)
+        sentiment_result = sentiment_analyzer.analyze_sentiment_with_context(question, coin_data)
         sentiment = sentiment_result["label"]
         confidence = sentiment_result["score"]
         step_start = log_step_time("Sentiment Analysis", step_start)
 
         # Step 5: Generate Response
         step_start = time.time()
-        response_text = generate_ai_response(question, sentiment, coin_data)
-        sentiment_explanation = get_sentiment_explanation(sentiment, confidence, coin_data)
+        response_text = crypto_service.generate_ai_response(question, sentiment, coin_data)
+        sentiment_explanation = sentiment_analyzer.get_sentiment_explanation(sentiment, confidence, coin_data)
         response_text += f"\n\n{sentiment_explanation}"
         step_start = log_step_time("Response Generation", step_start)
 
@@ -627,7 +334,7 @@ async def process_question(request: QueryRequest):
             redis_client.setex(
                 cache_key,
                 CACHE_TTLS['sentiment'],
-                json.dumps(response.dict())
+                json.dumps(response.model_dump())
             )
             logging.info(f"Response cached with key: {cache_key}")
         except Exception as e:
@@ -661,28 +368,6 @@ async def process_question(request: QueryRequest):
             confidence=0.5,
             metrics=metrics
         )
-    
-def get_coin_metrics(coin_data: Dict[str, Any]) -> Dict[str, str]:
-    """Generate metrics for a specific cryptocurrency"""
-    return {
-        "price": f"${coin_data['current_price']}",
-        "marketCap": f"${format_large_number(coin_data['market_cap'])}",
-        "volume24h": f"${format_large_number(coin_data['total_volume'])}",
-        "change24h": f"{coin_data['price_change_percentage_24h']}%"
-    }
-
-def get_market_overview_metrics(market_data: List[Dict[str, Any]]) -> Dict[str, str]:
-    """Generate metrics for overall market overview"""
-    total_market_cap = sum(coin['market_cap'] for coin in market_data)
-    total_volume = sum(coin['total_volume'] for coin in market_data)
-    avg_change = sum(coin['price_change_percentage_24h'] for coin in market_data) / len(market_data)
-
-    return {
-        "totalMarketCap": f"${format_large_number(total_market_cap)}",
-        "totalVolume": f"${format_large_number(total_volume)}",
-        "avgChange24h": f"{avg_change:.2f}%",
-        "coinsAnalyzed": f"{len(market_data)}"
-    }
        
 # Run the application with Uvicorn if this file is executed directly
 if __name__ == "__main__":
