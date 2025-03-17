@@ -45,7 +45,11 @@ const AiQuestionCard: React.FC = () => {
         throw new Error(errorData.error || "Failed to get AI response");
       }
 
-      return res.json();
+      const responseData = await res.json();
+
+      console.log("Response object:", responseData);
+
+      return responseData;
     },
     enabled: !!currentQuestion, // Only run the query if we have a question
     staleTime: 1000 * 60 * 5, // Cache responses for 5 minutes
@@ -170,7 +174,11 @@ const AiQuestionCard: React.FC = () => {
         {response && (
           <div className="mt-4 p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
             <p className="mb-4 text-gray-800 dark:text-gray-200">
-              <AnimatedResponse text={response.text} />
+              {response.text ? (
+                <AnimatedResponse text={response.text} />
+              ) : (
+                <span>No response available.</span>
+              )}
             </p>
 
             {response.sentiment && (

@@ -9,7 +9,7 @@ import logging
 import os
 import sys
 import time
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, Optional
 from urllib.parse import urlparse
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -29,8 +29,7 @@ from services import CryptoDataService, SentimentAnalyzer, CRYPTO_KEYWORDS
 from shared_types import QueryRequest, AIResponse
 from cache_utils import CACHE_TTLS, get_cache_key, log_cache_status
 from celery_worker import process_question_task
-from monitoring import log_memory_usage
-from utils import format_large_number, get_coin_metrics, get_market_overview_metrics
+from utils import get_coin_metrics, get_market_overview_metrics
 
 # Load environment variables
 load_dotenv()
@@ -344,6 +343,12 @@ async def process_question(request: QueryRequest) -> AIResponse:
                 )
             sentiment = sentiment_result["label"]
             confidence = sentiment_result["score"]
+
+            explanation = sentiment_analyzer.get_sentiment_explanation(
+                sentiment=sentiment,
+                confidence=confidence,
+                coin_data=coin_data
+            )
 
         # Step 5: Generate Response
         with timer.step("Response Generation"):
