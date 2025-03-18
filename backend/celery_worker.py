@@ -3,7 +3,6 @@ from typing import Dict, Any
 import os
 from dotenv import load_dotenv
 
-
 load_dotenv()
 
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/")
@@ -24,13 +23,6 @@ celery_app.conf.update(
     enable_utc=True,
 )
 
-# For long-running process question task
-@celery_app.task(name="process_question_task")
-def process_question_task(question_data: dict):
-    """
-    Celery task to process questions asynchronously.
-    This task will cal the `process_question` function from `main.py`.
-    """
-    from main import process_question                   # import here to avoid circular imports
-
-    return process_question(question_data)
+## Start the Celery worker
+if __name__ == "__main__":
+    celery_app.start()

@@ -22,14 +22,15 @@ from starlette.middleware.base import BaseHTTPMiddleware
 import uvicorn
 from redis import Redis
 from dotenv import load_dotenv
+from celery.result import AsyncResult
 
 
 # Local imports
 from services import CryptoDataService, SentimentAnalyzer, CRYPTO_KEYWORDS
 from shared_types import QueryRequest, AIResponse
 from cache_utils import CACHE_TTLS, get_cache_key, log_cache_status
-from celery_worker import process_question_task
 from utils import get_coin_metrics, get_market_overview_metrics
+from tasks import process_question_task
 
 # Load environment variables
 load_dotenv()
@@ -231,28 +232,45 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
                 # Start the Celery task to process the question
                 task = process_question_task.delay(request_data)
 
+                # Use AsyncResult to check task status
+                while True:
+                    result = AsyncResult(task.id)
+                    if result.ready():
+                        if result.successful():
+                            await manager.send_message(client_id, {
+                                "status": "complete",
+                                "response": result.result,
+                            })
+                        else:
+                            await manager.send_message(client_id, {
+                                "status": "error",
+                                "message": "Failed to process your question."
+                            })
+                        break
+                    await asyncio.sleep(1)               # Avoid blocking the event loop
+
                 # Poll the task status and send updates to the client
-                while not task.ready():
-                    await asyncio.sleep(1)              # Avoid blocking the event loop
-                    await manager.send_message(client_id, {
-                        "status": "processing",
-                        "message": "Still processing..."
-                    })
+                # while not task.ready():
+                #     await asyncio.sleep(1)              # Avoid blocking the event loop
+                #     await manager.send_message(client_id, {
+                #         "status": "processing",
+                #         "message": "Still processing..."
+                #     })
 
-                # Handle the task result
-                if task.successful():
-                    result = task.get()                 # Retrieve the result from Celery
+                # # Handle the task result
+                # if task.successful():
+                #     result = task.get()                 # Retrieve the result from Celery
 
-                    await manager.send_message(client_id, {
-                        "status": "complete",
-                        "response": result,
-                    })
-                else:
-                    # Handle task failure
-                    await manager.send_message(client_id, {
-                        "status": "error",
-                        "message": "Failed to process your question."
-                    })
+                #     await manager.send_message(client_id, {
+                #         "status": "complete",
+                #         "response": result,
+                #     })
+                # else:
+                #     # Handle task failure
+                #     await manager.send_message(client_id, {
+                #         "status": "error",
+                #         "message": "Failed to process your question."
+                #     })
 
             except Exception as e:
                 logging.error(f"Error processing message: {e}")
@@ -374,7 +392,7 @@ async def process_question(request: QueryRequest) -> AIResponse:
                 )
                 logging.info(f"Response cached with key: {cache_key}")
             except Exception as e:
-                logging.warning(f"Failed to cache response: {e}")
+                logging.warning(f"Failed to cache response for key {cache_key}: {str(e)}")
 
         # Log total processing time
         timing_metrics = timer.log_summary()
@@ -382,7 +400,7 @@ async def process_question(request: QueryRequest) -> AIResponse:
         return response
     
     except Exception as e:
-        logging.error(f"Error processing question: {str(e)}", exc_info=True)
+        logging.error(f"Error processing question: {request.question}. Error: {str(e)}", exc_info=True)
 
         # Attempt to serve stale cache in case of error
         try:
@@ -391,7 +409,7 @@ async def process_question(request: QueryRequest) -> AIResponse:
                 logging.info("Serving stale cached response due to error")
                 return AIResponse(**json.loads(stale_response))
         except Exception as cache_error:
-            logging.error(f"Failed to retrieve stale cache: {str(cache_error)}")
+            logging.error(f"Failed to retrieve stale cache for key: {cache_key}: {str(cache_error)}")
 
         # Fallback response
         return AIResponse(
