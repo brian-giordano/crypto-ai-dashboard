@@ -39,6 +39,7 @@ load_dotenv()
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
 PRODUCTION_URL = "https://crypto-ai-dashboard-lovat.vercel.app"
+print("FRONTEND_URL: ", FRONTEND_URL)
 
 # For timing process logs
 @dataclass
