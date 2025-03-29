@@ -220,8 +220,7 @@ class CryptoDataService:
 class SentimentAnalyzer:
     def __init__(self, redis_client: Redis):
         self.redis_client = redis_client
-        self.sentiment_pipeline = pipeline("sentiment-analysis",
-                                           model="yiyanghkust/finbert-tone")
+        self.sentiment_pipeline = pipeline("sentiment-analysis", model="yiyanghkust/finbert-tone")
 
     def analyze_sentiment_with_context(self, question: str,
                                        context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
@@ -242,8 +241,8 @@ class SentimentAnalyzer:
                 (result['label'] == 'NEGATIVE' and price_change < 0):
                 result['score'] = min(result['score'] * 1.1, 0.95)  # Boost confidence if aligned
 
-        self.redis_client.setex(cache_key, CACHE_TTLS['sentiment'],
-                                json.dumps(result))
+        self.redis_client.setex(cache_key, CACHE_TTLS['sentiment'], json.dumps(result))
+
         return result
 
     def get_sentiment_explanation(self, sentiment: str, confidence: float,

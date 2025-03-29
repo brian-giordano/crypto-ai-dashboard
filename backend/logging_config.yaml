@@ -21,7 +21,7 @@ loggers:
     level: INFO
     handlers: [console]
     propagate: False
-  main: # Your app's logger
+  main: # our app's logger
     level: INFO
     handlers: [console]
     propagate: False
