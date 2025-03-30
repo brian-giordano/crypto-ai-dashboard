@@ -339,4 +339,12 @@ async def process_question(request: QueryRequest) -> AIResponse:
 # Run the application with Uvicorn if this file is executed directly
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8000)) # Default to 8000 if port is not set
-    uvicorn.run(app, host="0.0.0.0", port=port, workers=4)
+    uvicorn.run(
+        app, 
+        host="0.0.0.0", 
+        port=port, 
+        workers=1, 
+        worker_class="uvicorn.workers.UvicornWorker",
+        log_level="info",
+        access_log=True
+        )
