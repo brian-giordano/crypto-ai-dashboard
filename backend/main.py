@@ -207,10 +207,28 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
                 # Parse the question
                 request_data = json.loads(data)
 
+                # Immediately fetch and send crypto metrics
+                try:
+                    crypto_data = crypto_service.get_market_data()
+                    if crypto_data:
+                        metrics = {
+                            "price": crypto_data.get("price", "N/A"),
+                            "marketCap": crypto_data.get("market_cap", "N/A"),
+                            "volume24h": crypto_data.get("volume_24h", "N/A"),
+                            "change24h": crypto_data.get("price_change_24h", "N/A")
+                        }
+                        await manager.send_message(client_id, {
+                            "status": "metrics",
+                            "metrics": metrics
+                        })
+                except Exception as e:
+                    logging.error(f"Error fetching crypto metrics: {e}")
+                    # Continue processing even if metrics fetch fails
+
                 # Send processing status
                 await manager.send_message(client_id, {
                     "status": "processing",
-                    "message": "Processing your questions..."
+                    "message": "Processing your question..."
                 })
 
                 # Start the Celery task to process the question
@@ -231,7 +249,7 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
                                 "message": "Failed to process your question."
                             })
                         break
-                    await asyncio.sleep(1)               # Avoid blocking the event loop
+                    await asyncio.sleep(1)
 
             except Exception as e:
                 logging.error(f"Error processing message: {e}")
