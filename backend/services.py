@@ -1,7 +1,6 @@
 import logging
 from typing import Dict, Any, Optional, List
 from redis import Redis
-import redis
 from transformers import pipeline
 import requests
 import json

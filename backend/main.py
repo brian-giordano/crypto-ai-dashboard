@@ -20,16 +20,15 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Requ
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 import uvicorn
-from redis import Redis
 from dotenv import load_dotenv
 from celery.result import AsyncResult
 
 
 # Local imports
 from services import CryptoDataService, SentimentAnalyzer, CRYPTO_KEYWORDS
+from redis_client import redis_client
 from shared_types import QueryRequest, AIResponse
 from cache_utils import CACHE_TTLS, get_cache_key, log_cache_status
-from utils import get_coin_metrics, get_market_overview_metrics
 from tasks import process_question_task
 
 # Load environment variables
@@ -88,22 +87,22 @@ logging.basicConfig(
     ]
 )
 
-# Parse the Redis URL and initialize client
-parsed_redis_url = urlparse(REDIS_URL)
+# # Parse the Redis URL and initialize client
+# parsed_redis_url = urlparse(REDIS_URL)
 
-redis_client = Redis(
-    host=parsed_redis_url.hostname,
-    port=parsed_redis_url.port,
-    password=parsed_redis_url.password,
-    decode_responses=True
-)
+# redis_client = Redis(
+#     host=parsed_redis_url.hostname,
+#     port=parsed_redis_url.port,
+#     password=parsed_redis_url.password,
+#     decode_responses=True
+# )
 
-# Test Redis connection
-try:
-    redis_client.ping()
-    logging.info(f"Successfully connected to Redis at {parsed_redis_url.hostname}:{parsed_redis_url.port}")
-except Exception as e:
-    logging.error(f"Failed to connect to Redis: {e}")
+# # Test Redis connection
+# try:
+#     redis_client.ping()
+#     logging.info(f"Successfully connected to Redis at {parsed_redis_url.hostname}:{parsed_redis_url.port}")
+# except Exception as e:
+#     logging.error(f"Failed to connect to Redis: {e}")
 
 # FastAPI App main
 app = FastAPI()
@@ -309,21 +308,10 @@ async def process_question(request: QueryRequest) -> AIResponse:
         AIResponse: Generated response with sentiment analysis and metrics
     """
     timer = ProcessingTimer()
-    metrics = {}
-    coin_data = None
-    market_data = None
-
+    
     try:
-        """
-        Performance monitoring metrics:
-        - Context Extraction: Time taken to identify cryptocurrency from question
-        - Data Fetching: Time taken to retrieve market/coin data (including cache checks)
-        - Sentiment Analysis: Time taken for sentiment analysis (including cache)
-        - Response Generation: Time taken to generate and format the response
-        """
-        cache_key = get_cache_key('full_response', request.question)
-        
         # Step 1: Check cache
+        cache_key = get_cache_key('full_response', request.question)
         with timer.step("Cache Check"):
             cached_response = redis_client.get(cache_key)
             if cached_response:
@@ -331,75 +319,42 @@ async def process_question(request: QueryRequest) -> AIResponse:
                 return AIResponse(**json.loads(cached_response))
             log_cache_status(cache_key, False)
 
-        # Step 2: Extract context and identify crypto
-        with timer.step("Context Extraction"):
-            question = request.question.lower()
-            crypto_context = "the cryptocurrency market"
-
-            for keyword in CRYPTO_KEYWORDS:
-                if keyword in question:
-                    crypto_context = CRYPTO_KEYWORDS[keyword]
-                    break
-
-        # Step 3: Parallel data fetching
-        with timer.step("Data Fetching"):
-            # Fetch both coin and market data if needed
-            if crypto_context != "the cryptocurrency market":
-                coin_data = crypto_service.get_coin_by_name(crypto_context)
-                if coin_data:
-                    metrics = get_coin_metrics(coin_data)
-            else:
-                # Fetch market overview data for general questions
-                market_data = crypto_service.get_market_data(limit=10)
-                if market_data:
-                    metrics = get_market_overview_metrics(market_data)
-
-        # Step 4: Sentiment Analysis
-        with timer.step("Sentiment Analysis"):
-            sentiment_result = sentiment_analyzer.analyze_sentiment_with_context(
-                question, 
-                context=coin_data if coin_data else None
-                )
-            sentiment = sentiment_result["label"]
-            confidence = sentiment_result["score"]
-
-            # explanation = sentiment_analyzer.get_sentiment_explanation(
-            #     sentiment=sentiment,
-            #     confidence=confidence,
-            #     coin_data=coin_data
-            # )
-
-        # Step 5: Generate Response
-        with timer.step("Response Generation"):
-            response_text = crypto_service.generate_ai_response(question, sentiment, coin_data)
-            sentiment_explanation = sentiment_analyzer.get_sentiment_explanation(sentiment, confidence, coin_data)
-            response_text += f"\n\n{sentiment_explanation}"
-
-        # Create response object
-        with timer.step("Response Caching"):
-            response = AIResponse(
-                text=response_text,
-                sentiment=sentiment,
-                confidence=confidence,
-                metrics=metrics
-            )
-
-            # Cache the response
+        # Step 2: Start Celery task
+        with timer.step("Task Creation"):
+            # Create a task to process the question
+            task = process_question_task.delay(request.question)
+            
+            # Wait for the task to complete with a timeout
             try:
-                redis_client.setex(
-                    cache_key,
-                    CACHE_TTLS['sentiment'],
-                    json.dumps(response.model_dump())
+                result = task.get(timeout=30)  # 30 seconds timeout
+                if result:
+                    # Cache the response
+                    try:
+                        redis_client.setex(
+                            cache_key,
+                            CACHE_TTLS['sentiment'],
+                            json.dumps(result)
+                        )
+                        logging.info(f"Response cached with key: {cache_key}")
+                    except Exception as e:
+                        logging.warning(f"Failed to cache response for key {cache_key}: {str(e)}")
+
+                    # Return the response
+                    return AIResponse(**result)
+                
+            except TimeoutError:
+                logging.error("Task processing timed out")
+                raise HTTPException(
+                    status_code=504,
+                    detail="Request timed out while processing"
                 )
-                logging.info(f"Response cached with key: {cache_key}")
             except Exception as e:
-                logging.warning(f"Failed to cache response for key {cache_key}: {str(e)}")
+                logging.error(f"Task processing failed: {str(e)}")
+                raise HTTPException(
+                    status_code=500,
+                    detail="Failed to process request"
+                )
 
-        # Log total processing time
-        timing_metrics = timer.log_summary()
-
-        return response
-    
     except Exception as e:
         logging.error(f"Error processing question: {request.question}. Error: {str(e)}", exc_info=True)
 
@@ -417,7 +372,7 @@ async def process_question(request: QueryRequest) -> AIResponse:
             text="I apologize, but I'm having trouble processing your request at this time. Please try again.",
             sentiment="NEUTRAL",
             confidence=0.5,
-            metrics=metrics
+            metrics={}
         )
        
 # Run the application with Uvicorn if this file is executed directly
