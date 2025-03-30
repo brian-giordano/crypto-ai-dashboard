@@ -228,7 +228,7 @@ const AiQuestionCard: React.FC = () => {
             {response.metrics && (
               <div className="mb-4 p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
                 <div className="grid grid-cols-2 gap-2">
-                  {visibleMetrics.map((metric, index) => (
+                  {visibleMetrics.map((metric) => (
                     <div
                       key={metric.label}
                       className={`
