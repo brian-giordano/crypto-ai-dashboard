@@ -15,3 +15,7 @@ class AIResponse(BaseModel):
     sentiment: Optional[str] = None
     confidence: Optional[float] = None
     metrics: Optional[Dict[str, str]] = None
+    status: Optional[str] = None
+
+class TaskResponse(BaseModel):
+    task_id: str

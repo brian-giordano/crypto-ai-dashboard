@@ -27,7 +27,7 @@ from celery.result import AsyncResult
 # Local imports
 from services import CryptoDataService, SentimentAnalyzer, CRYPTO_KEYWORDS
 from redis_client import redis_client
-from shared_types import QueryRequest, AIResponse
+from shared_types import QueryRequest, AIResponse, TaskResponse
 from config import REDIS_URL, FRONTEND_URL
 from cache_utils import CACHE_TTLS, get_cache_key, log_cache_status
 from tasks import process_question_task

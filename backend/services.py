@@ -1,3 +1,4 @@
+import torch
 import logging
 from typing import Dict, Any, Optional, List
 from redis import Redis
@@ -217,21 +218,41 @@ class CryptoDataService:
                 return "Based on current market data, cryptocurrencies are showing mixed performance. For specific insights, try asking about a particular coin or market metric."
 
 class SentimentAnalyzer:
+    # Static variables that belong to the class, not instances
+    _shared_model = None  # Will store our loaded model
+    _is_initialized = False  # Track if we've loaded the model
+
     def __init__(self, redis_client: Redis):
         self.redis_client = redis_client
-        self.sentiment_pipeline = pipeline("sentiment-analysis", model="yiyanghkust/finbert-tone")
+
+        # Only load the model if it hasn't been loaded yet
+        if not SentimentAnalyzer._is_initialized:
+            device = 0 if torch.cuda.is_available() else -1
+            logging.info(f"Device set to use {'cuda' if device == 0 else 'cpu'}")
+            SentimentAnalyzer._shared_model = pipeline(
+                "sentiment-analysis",
+                model="yiyanghkust/finbert-tone",
+                device=device
+            )
+            SentimentAnalyzer._is_initialized = True
 
     def analyze_sentiment_with_context(self, question: str,
                                        context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """Analyze sentiment with optional context"""
+        # Check cache first
         cache_key = get_cache_key("sentiment", question)
         cached_result = self.redis_client.get(cache_key)
+
         if cached_result:
             log_cache_status(cache_key, True)
             return json.loads(cached_result)
 
         log_cache_status(cache_key, False)
-        result = self.sentiment_pipeline(question)[0]
+        # Use the shared model instead of creating a new one
+        result = SentimentAnalyzer._shared_model(question)[0]
+
+        # Cache the result
+        self.redis_client.setex(cache_key, CACHE_TTLS['sentiment'], json.dumps(result))
 
         # Adjust sentiment based on context if provided
         if context and 'price_change_24h' in context:
@@ -239,8 +260,6 @@ class SentimentAnalyzer:
             if (result['label'] == 'POSITIVE' and price_change > 0) or \
                 (result['label'] == 'NEGATIVE' and price_change < 0):
                 result['score'] = min(result['score'] * 1.1, 0.95)  # Boost confidence if aligned
-
-        self.redis_client.setex(cache_key, CACHE_TTLS['sentiment'], json.dumps(result))
 
         return result
 
