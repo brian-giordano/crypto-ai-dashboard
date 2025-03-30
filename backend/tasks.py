@@ -8,14 +8,18 @@ from typing import Dict
 import time
 
 @shared_task
-def process_question_task(question: str) -> dict:
+def process_question_task(question) -> dict:
     """
     Celery task to process questions asynchronously.
-    This task will call the `process_question` function from `main.py`.
     """
-    # from main import process_question           # Lazy import to avoid circular import issue.
-
     try:
+        # Handle question input - could be string or dict
+        if isinstance(question, dict):
+            question = question.get("question", "")  # Extract the "question" key or default to an empty string
+
+        if not isinstance(question, str):
+            raise ValueError("Question must be a string")
+
         # Initialize services
         crypto_service = CryptoDataService(redis_client)
         sentiment_analyzer = SentimentAnalyzer(redis_client)
@@ -32,11 +36,6 @@ def process_question_task(question: str) -> dict:
             if keyword in question_lower:
                 crypto_context = CRYPTO_KEYWORDS[keyword]
                 break
-
-        # # Fetch data
-        # metrics = {}
-        # coin_data = None
-        # market_data = None
 
         # Fetch data with caching
         metrics = {}
@@ -59,8 +58,16 @@ def process_question_task(question: str) -> dict:
         confidence = sentiment_result["score"]
 
         # Generate response
-        response_text = crypto_service.generate_ai_response(question, sentiment, coin_data if 'coin_data' in locals() else None)
-        sentiment_explanation = sentiment_analyzer.get_sentiment_explanation(sentiment, confidence, coin_data if 'coin_data' in locals() else None)
+        response_text = crypto_service.generate_ai_response(
+            question,
+            sentiment,
+            coin_data if 'coin_data' in locals() else None
+        )
+        sentiment_explanation = sentiment_analyzer.get_sentiment_explanation(
+            sentiment,
+            confidence,
+            coin_data if 'coin_data' in locals() else None
+        )
         response_text += f"\n\n{sentiment_explanation}"
 
         # Log processing time
@@ -75,7 +82,6 @@ def process_question_task(question: str) -> dict:
             "metrics": metrics
         }
 
-    
     except Exception as e:
         logging.error(f"Error in process_question_task: {str(e)}")
         raise RuntimeError(f"Error in process_question_task: {str(e)}")
