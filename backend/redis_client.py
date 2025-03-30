@@ -1,10 +1,7 @@
-import os
 from redis import Redis
 from urllib.parse import urlparse
 import logging
-
-# Load environment variables
-REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
+from config import REDIS_URL
 
 # Parse the Redis URL
 parsed_redis_url = urlparse(REDIS_URL)
