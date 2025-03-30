@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Sparkles } from "lucide-react";
 import { Button } from "./ui/button";
 import { useQuery } from "@tanstack/react-query";
@@ -26,13 +26,69 @@ const AiQuestionCard: React.FC = () => {
   const [question, setQuestion] = useState<string>("");
   const [currentQuestion, setCurrentQuestion] = useState<string>("");
   const [visibleMetrics, setVisibleMetrics] = useState<MetricItem[]>([]);
+  const wsRef = useRef<WebSocket | null>(null);
 
-  // Use React Query for data fetching with proper caching
+  const WS_URL =
+    process.env.NODE_ENV === "production"
+      ? "wss://crypto-ai-dashboard.onrender.com/ws"
+      : "ws://localhost:8000/ws";
+
+  const setupMetrics = useCallback((metricsData: AIResponse["metrics"]) => {
+    if (!metricsData) return;
+
+    const metrics = [
+      { label: "Price", value: metricsData.price, isVisible: false },
+      { label: "Market Cap", value: metricsData.marketCap, isVisible: false },
+      { label: "24h Volume", value: metricsData.volume24h, isVisible: false },
+      {
+        label: "24h Change",
+        value: metricsData.change24h
+          ? `${parseFloat(metricsData.change24h).toFixed(2)}%`
+          : "N/A",
+        isVisible: false,
+      },
+    ];
+
+    setVisibleMetrics(metrics);
+    metrics.forEach((_, index) => {
+      setTimeout(() => {
+        setVisibleMetrics((prev) =>
+          prev.map((item, i) =>
+            i === index ? { ...item, isVisible: true } : item
+          )
+        );
+      }, index * 600);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const ws = new WebSocket(`${WS_URL}/${Date.now()}`);
+    wsRef.current = ws;
+
+    ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.status === "metrics" && data.metrics) {
+          setupMetrics(data.metrics);
+        }
+      } catch (error) {
+        console.error("Error processing WebSocket message:", error);
+      }
+    };
+
+    return () => {
+      if (wsRef.current) {
+        wsRef.current.close();
+      }
+    };
+  }, [WS_URL, setupMetrics]);
+
   const {
     data: response,
     isLoading,
     error,
-    // refetch,
     isError,
   } = useQuery<AIResponse, Error>({
     queryKey: ["aiResponse", currentQuestion],
@@ -52,15 +108,17 @@ const AiQuestionCard: React.FC = () => {
         throw new Error(errorData.error || "Failed to get AI response");
       }
 
-      const responseData = await res.json();
-
-      console.log("Response object:", responseData);
-
-      return responseData;
+      return res.json();
     },
-    enabled: !!currentQuestion, // Only run the query if we have a question
-    staleTime: 1000 * 60 * 5, // Cache responses for 5 minutes
+    enabled: !!currentQuestion,
+    staleTime: 1000 * 60 * 5,
   });
+
+  useEffect(() => {
+    if (response?.metrics && !visibleMetrics.some((m) => m.isVisible)) {
+      setupMetrics(response.metrics);
+    }
+  }, [response?.metrics, visibleMetrics, setupMetrics]);
 
   const suggestedQuestions = [
     "What is the trend for Bitcoin?",
@@ -69,59 +127,27 @@ const AiQuestionCard: React.FC = () => {
     "Predict Ethereum price for next week",
   ];
 
-  // Handle staggered metrics visibility after a question is asked.
-  useEffect(() => {
-    if (response?.metrics) {
-      const metrics = [
-        {
-          label: "Price",
-          value: response.metrics.price,
-          isVisible: false,
-        },
-        {
-          label: "Market Cap",
-          value: response.metrics.marketCap,
-          isVisible: false,
-        },
-        {
-          label: "24h Volume",
-          value: response.metrics.volume24h,
-          isVisible: false,
-        },
-        {
-          label: "24h Change",
-          value: response.metrics.change24h
-            ? `${parseFloat(response.metrics.change24h).toFixed(2)}%`
-            : "N/A",
-          isVisible: false,
-        },
-      ];
-
-      setVisibleMetrics(metrics);
-
-      // Show each metric with a delay
-      metrics.forEach((_, index) => {
-        setTimeout(() => {
-          setVisibleMetrics((prev) =>
-            prev.map((item, i) =>
-              i === index ? { ...item, isVisible: true } : item
-            )
-          );
-        }, index * 600); // 600ms delay between each metric
-      });
-    }
-  }, [response?.metrics]);
-
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!question.trim()) return;
+
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ question }));
+    }
+
     setCurrentQuestion(question);
     setVisibleMetrics([]);
   };
 
   const selectSuggestedQuestion = (q: string) => {
     setQuestion(q);
-    setCurrentQuestion(q); // Immediately trigger the query
+
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ question: q }));
+    }
+
+    setCurrentQuestion(q);
+    setVisibleMetrics([]);
   };
 
   return (
@@ -222,46 +248,44 @@ const AiQuestionCard: React.FC = () => {
           </div>
         )}
 
-        {response && (
-          <div className="mt-4">
-            {/* Metrics Section - Shown First */}
-            {response.metrics && (
-              <div className="mb-4 p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
-                <div className="grid grid-cols-2 gap-2">
-                  {visibleMetrics.map((metric) => (
-                    <div
-                      key={metric.label}
-                      className={`
-                        bg-white dark:bg-gray-700 p-2 rounded border border-gray-200 
-                        dark:border-gray-600 transition-all duration-300 ease-in-out
-                        ${
-                          metric.isVisible
-                            ? "opacity-100 transform translate-y-0"
-                            : "opacity-0 transform translate-y-4"
-                        }
-                      `}
+        <div className="mt-4">
+          {visibleMetrics.length > 0 && (
+            <div className="mb-4 p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+              <div className="grid grid-cols-2 gap-2">
+                {visibleMetrics.map((metric) => (
+                  <div
+                    key={metric.label}
+                    className={`
+                      bg-white dark:bg-gray-700 p-2 rounded border border-gray-200 
+                      dark:border-gray-600 transition-all duration-300 ease-in-out
+                      ${
+                        metric.isVisible
+                          ? "opacity-100 transform translate-y-0"
+                          : "opacity-0 transform translate-y-4"
+                      }
+                    `}
+                  >
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      {metric.label}
+                    </p>
+                    <p
+                      className={`font-medium ${
+                        metric.label === "24h Change"
+                          ? parseFloat(metric.value) > 0
+                            ? "text-green-500"
+                            : "text-red-500"
+                          : ""
+                      }`}
                     >
-                      <p className="text-xs text-gray-500 dark:text-gray-400">
-                        {metric.label}
-                      </p>
-                      <p
-                        className={`font-medium ${
-                          metric.label === "24h Change"
-                            ? parseFloat(metric.value) > 0
-                              ? "text-green-500"
-                              : "text-red-500"
-                            : ""
-                        }`}
-                      >
-                        {metric.value}
-                      </p>
-                    </div>
-                  ))}
-                </div>
+                      {metric.value}
+                    </p>
+                  </div>
+                ))}
               </div>
-            )}
+            </div>
+          )}
 
-            {/* Text Response and Sentiment - Shown Second */}
+          {response && (
             <div className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
               <p className="mb-4 text-gray-800 dark:text-gray-200">
                 {response.text ? (
@@ -296,8 +320,8 @@ const AiQuestionCard: React.FC = () => {
                 </div>
               )}
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </div>
   );
