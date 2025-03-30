@@ -1,7 +1,6 @@
 from celery_app import celery_app
 from redis_client import redis_client
 from celery import shared_task
-import os
 import logging
 
 from urllib.parse import urlparse

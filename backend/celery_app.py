@@ -1,8 +1,5 @@
 from celery import Celery
-import os
-
-# Load environment variables
-REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
+from config import REDIS_URL
 
 # Create Celery app
 celery_app = Celery(

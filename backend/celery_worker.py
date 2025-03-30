@@ -1,14 +1,9 @@
 from celery import Celery
 from typing import Dict, Any
-import os
+from config import REDIS_URL
 from dotenv import load_dotenv
 from redis import Redis
 import sys
-
-load_dotenv()
-
-REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/")
-print(f"Using Redis URL: {REDIS_URL}")  # Log the Redis URL
 
 # Test Redis connection
 try:

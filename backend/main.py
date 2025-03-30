@@ -28,17 +28,18 @@ from celery.result import AsyncResult
 from services import CryptoDataService, SentimentAnalyzer, CRYPTO_KEYWORDS
 from redis_client import redis_client
 from shared_types import QueryRequest, AIResponse
+from config import REDIS_URL, FRONTEND_URL
 from cache_utils import CACHE_TTLS, get_cache_key, log_cache_status
 from tasks import process_question_task
 
 # Load environment variables
-load_dotenv()
+# load_dotenv()
 
 # Configuration
-FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
-REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
+# FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
+# REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
 PRODUCTION_URL = "https://crypto-ai-dashboard-lovat.vercel.app"
-print("FRONTEND_URL: ", FRONTEND_URL)
+# print("FRONTEND_URL: ", FRONTEND_URL)
 
 # For timing process logs
 @dataclass
@@ -86,23 +87,6 @@ logging.basicConfig(
         logging.StreamHandler(sys.stdout)     # Logs to console (for visibility in Render.)
     ]
 )
-
-# # Parse the Redis URL and initialize client
-# parsed_redis_url = urlparse(REDIS_URL)
-
-# redis_client = Redis(
-#     host=parsed_redis_url.hostname,
-#     port=parsed_redis_url.port,
-#     password=parsed_redis_url.password,
-#     decode_responses=True
-# )
-
-# # Test Redis connection
-# try:
-#     redis_client.ping()
-#     logging.info(f"Successfully connected to Redis at {parsed_redis_url.hostname}:{parsed_redis_url.port}")
-# except Exception as e:
-#     logging.error(f"Failed to connect to Redis: {e}")
 
 # FastAPI App main
 app = FastAPI()
@@ -248,29 +232,6 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
                             })
                         break
                     await asyncio.sleep(1)               # Avoid blocking the event loop
-
-                # Poll the task status and send updates to the client
-                # while not task.ready():
-                #     await asyncio.sleep(1)              # Avoid blocking the event loop
-                #     await manager.send_message(client_id, {
-                #         "status": "processing",
-                #         "message": "Still processing..."
-                #     })
-
-                # # Handle the task result
-                # if task.successful():
-                #     result = task.get()                 # Retrieve the result from Celery
-
-                #     await manager.send_message(client_id, {
-                #         "status": "complete",
-                #         "response": result,
-                #     })
-                # else:
-                #     # Handle task failure
-                #     await manager.send_message(client_id, {
-                #         "status": "error",
-                #         "message": "Failed to process your question."
-                #     })
 
             except Exception as e:
                 logging.error(f"Error processing message: {e}")
