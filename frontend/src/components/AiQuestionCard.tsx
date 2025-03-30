@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Sparkles } from "lucide-react";
 import { Button } from "./ui/button";
 import { useQuery } from "@tanstack/react-query";
@@ -16,9 +16,16 @@ interface AIResponse {
   };
 }
 
+interface MetricItem {
+  label: string;
+  value: string;
+  isVisible: boolean;
+}
+
 const AiQuestionCard: React.FC = () => {
   const [question, setQuestion] = useState<string>("");
   const [currentQuestion, setCurrentQuestion] = useState<string>("");
+  const [visibleMetrics, setVisibleMetrics] = useState<MetricItem[]>([]);
 
   // Use React Query for data fetching with proper caching
   const {
@@ -62,10 +69,54 @@ const AiQuestionCard: React.FC = () => {
     "Predict Ethereum price for next week",
   ];
 
+  // Handle staggered metrics visibility after a question is asked.
+  useEffect(() => {
+    if (response?.metrics) {
+      const metrics = [
+        {
+          label: "Price",
+          value: response.metrics.price,
+          isVisible: false,
+        },
+        {
+          label: "Market Cap",
+          value: response.metrics.marketCap,
+          isVisible: false,
+        },
+        {
+          label: "24h Volume",
+          value: response.metrics.volume24h,
+          isVisible: false,
+        },
+        {
+          label: "24h Change",
+          value: response.metrics.change24h
+            ? `${parseFloat(response.metrics.change24h).toFixed(2)}%`
+            : "N/A",
+          isVisible: false,
+        },
+      ];
+
+      setVisibleMetrics(metrics);
+
+      // Show each metric with a delay
+      metrics.forEach((_, index) => {
+        setTimeout(() => {
+          setVisibleMetrics((prev) =>
+            prev.map((item, i) =>
+              i === index ? { ...item, isVisible: true } : item
+            )
+          );
+        }, index * 600); // 600ms delay between each metric
+      });
+    }
+  }, [response?.metrics]);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!question.trim()) return;
     setCurrentQuestion(question);
+    setVisibleMetrics([]);
   };
 
   const selectSuggestedQuestion = (q: string) => {
@@ -172,80 +223,79 @@ const AiQuestionCard: React.FC = () => {
         )}
 
         {response && (
-          <div className="mt-4 p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
-            <p className="mb-4 text-gray-800 dark:text-gray-200">
-              {response.text ? (
-                <AnimatedResponse text={response.text} />
-              ) : (
-                <span>No response available.</span>
-              )}
-            </p>
-
-            {response.sentiment && (
-              <div className="mb-4 text-sm">
-                <span className="text-gray-500 dark:text-gray-400">
-                  Sentiment:{" "}
-                </span>
-                <span
-                  className={`font-medium ${
-                    response.sentiment.toUpperCase() === "POSITIVE"
-                      ? "text-green-500"
-                      : response.sentiment.toUpperCase() === "NEGATIVE"
-                      ? "text-red-500"
-                      : "text-gray-500"
-                  }`}
-                >
-                  {response.sentiment}
-                </span>
-                {response.confidence && (
-                  <span className="text-gray-500 dark:text-gray-400 ml-2">
-                    (Confidence:{" "}
-                    {Math.min(Math.round(response.confidence * 100), 99.9)}%)
-                  </span>
-                )}
+          <div className="mt-4">
+            {/* Metrics Section - Shown First */}
+            {response.metrics && (
+              <div className="mb-4 p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                <div className="grid grid-cols-2 gap-2">
+                  {visibleMetrics.map((metric) => (
+                    <div
+                      key={metric.label}
+                      className={`
+                        bg-white dark:bg-gray-700 p-2 rounded border border-gray-200 
+                        dark:border-gray-600 transition-all duration-300 ease-in-out
+                        ${
+                          metric.isVisible
+                            ? "opacity-100 transform translate-y-0"
+                            : "opacity-0 transform translate-y-4"
+                        }
+                      `}
+                    >
+                      <p className="text-xs text-gray-500 dark:text-gray-400">
+                        {metric.label}
+                      </p>
+                      <p
+                        className={`font-medium ${
+                          metric.label === "24h Change"
+                            ? parseFloat(metric.value) > 0
+                              ? "text-green-500"
+                              : "text-red-500"
+                            : ""
+                        }`}
+                      >
+                        {metric.value}
+                      </p>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
 
-            {response.metrics && (
-              <div className="grid grid-cols-2 gap-2 mt-4">
-                <div className="bg-white dark:bg-gray-700 p-2 rounded border border-gray-200 dark:border-gray-600">
-                  <p className="text-xs text-gray-500 dark:text-gray-400">
-                    Price
-                  </p>
-                  <p className="font-medium">{response.metrics.price}</p>
-                </div>
-                <div className="bg-white dark:bg-gray-700 p-2 rounded border border-gray-200 dark:border-gray-600">
-                  <p className="text-xs text-gray-500 dark:text-gray-400">
-                    Market Cap
-                  </p>
-                  <p className="font-medium">{response.metrics.marketCap}</p>
-                </div>
-                <div className="bg-white dark:bg-gray-700 p-2 rounded border border-gray-200 dark:border-gray-600">
-                  <p className="text-xs text-gray-500 dark:text-gray-400">
-                    24h Volume
-                  </p>
-                  <p className="font-medium">{response.metrics.volume24h}</p>
-                </div>
-                <div className="bg-white dark:bg-gray-700 p-2 rounded border border-gray-200 dark:border-gray-600">
-                  <p className="text-xs text-gray-500 dark:text-gray-400">
-                    24h Change
-                  </p>
-                  <p
+            {/* Text Response and Sentiment - Shown Second */}
+            <div className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+              <p className="mb-4 text-gray-800 dark:text-gray-200">
+                {response.text ? (
+                  <AnimatedResponse text={response.text} />
+                ) : (
+                  <span>No response available.</span>
+                )}
+              </p>
+
+              {response.sentiment && (
+                <div className="text-sm">
+                  <span className="text-gray-500 dark:text-gray-400">
+                    Sentiment:{" "}
+                  </span>
+                  <span
                     className={`font-medium ${
-                      response.metrics &&
-                      response.metrics.change24h &&
-                      parseFloat(response.metrics.change24h) > 0
+                      response.sentiment.toUpperCase() === "POSITIVE"
                         ? "text-green-500"
-                        : "text-red-500"
+                        : response.sentiment.toUpperCase() === "NEGATIVE"
+                        ? "text-red-500"
+                        : "text-gray-500"
                     }`}
                   >
-                    {response.metrics && response.metrics.change24h
-                      ? `${parseFloat(response.metrics.change24h).toFixed(2)}%`
-                      : "N/A"}
-                  </p>
+                    {response.sentiment}
+                  </span>
+                  {response.confidence && (
+                    <span className="text-gray-500 dark:text-gray-400 ml-2">
+                      (Confidence:{" "}
+                      {Math.min(Math.round(response.confidence * 100), 99.9)}%)
+                    </span>
+                  )}
                 </div>
-              </div>
-            )}
+              )}
+            </div>
           </div>
         )}
       </div>
