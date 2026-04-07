@@ -32,7 +32,7 @@ const DashboardLayout: React.FC = () => {
         </div>
       </main>
       <footer className="bg-black text-white p-4 text-center">
-        © 2025 Crypto AI Dashboard
+        © {new Date().getFullYear()} Crypto AI Dashboard
       </footer>
     </div>
   );
