@@ -3,7 +3,7 @@
 
 import { useCryptoStore } from "@/store/useCryptoStore";
 import { Button } from "./ui/button";
-import { Minus } from "lucide-react";
+import { Minus, Plus } from "lucide-react"; // ← added Plus for empty state
 import DashboardCard from "./DashboardCard";
 import AiQuestionCard from "./AiQuestionCard";
 
@@ -14,19 +14,23 @@ const Dashboard: React.FC = () => {
     <div>
       <h2 className="text-xl font-semibold mb-4">My Dashboard</h2>
 
-      {/* Always render the grid container */}
-      <div className="grid grid-cols-1 gap-6 bg-gray-300 rounded-lg p-6 mb-4 md:grid-cols-2 lg:grid-cols-3 dark:bg-gray-800">
+      {/* Modernized grid container */}
+      <div className="grid grid-cols-1 gap-6 bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm border border-border/60 shadow-sm rounded-3xl p-6 mb-4 md:grid-cols-2 lg:grid-cols-3">
         {/* Dedicated slot for AiQuestionCard */}
         <div className="col-span-1 md:col-span-2 lg:col-span-3">
           <AiQuestionCard />
         </div>
 
-        {/* Conditional message when no crypto cards */}
+        {/* Improved empty state */}
         {dashboardCryptos.length === 0 && (
-          <div className="col-span-1 md:col-span-2 lg:col-span-3 text-center p-6 bg-gray-200 dark:bg-gray-700 rounded-lg">
-            <p className="text-gray-700 dark:text-gray-300">
-              Your dashboard is empty. Add cryptocurrencies from the market data
-              panel.
+          <div className="col-span-1 md:col-span-2 lg:col-span-3 flex flex-col items-center justify-center py-12 text-center bg-gray-50 dark:bg-gray-800/50 rounded-2xl border border-dashed border-border">
+            <Plus className="w-8 h-8 text-gray-400 dark:text-gray-500 mb-3" />
+            <p className="text-gray-600 dark:text-gray-400 font-medium">
+              Your dashboard is empty
+            </p>
+            <p className="text-sm text-gray-500 dark:text-gray-500 mt-1 max-w-[240px]">
+              Add cryptocurrencies from the market data panel on the right to
+              get started
             </p>
           </div>
         )}

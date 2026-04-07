@@ -15,6 +15,24 @@ const DashboardLayout: React.FC = () => {
           <ThemeToggle />
         </div>
       </header>
+
+      {/* 🚀 DEMO MODE BANNER - only shows in demo mode */}
+      {process.env.NEXT_PUBLIC_DEMO_MODE === "true" && (
+        <div className="bg-gradient-to-r from-amber-500 to-orange-500 text-white text-xs font-medium px-6 py-2 text-center tracking-widest flex items-center justify-center gap-3">
+          🚀 DEMO MODE — Instant mock data for portfolio showcase
+          <button
+            onClick={() => {
+              const url = new URL(window.location.href);
+              url.searchParams.set("demo", "false");
+              window.location.href = url.toString();
+            }}
+            className="underline hover:no-underline text-white/90 text-[10px] transition-colors"
+          >
+            Switch to live data →
+          </button>
+        </div>
+      )}
+
       <main className="flex-grow p-4 flex flex-col md:flex-row">
         <div className="flex-grow mv-4 md:mb-0 md:w-3/4">
           <Dashboard />

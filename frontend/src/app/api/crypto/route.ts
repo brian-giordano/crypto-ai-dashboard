@@ -1,8 +1,23 @@
-import { NextResponse } from "next/server";
+// frontend/src/app/api/crypto/route.ts
+import { NextRequest, NextResponse } from "next/server";
+import { mockCryptoData } from "@/lib/mock-data";
 
 const GcApiUrl = process.env.NEXT_PUBLIC_GC_MARKET_DATA_API_URL;
+const IS_DEMO_ENV = process.env.NEXT_PUBLIC_DEMO_MODE === "true";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  // Optional toggle support: ?demo=true in the URL overrides the env var
+  const url = new URL(request.url);
+  const forceDemo = url.searchParams.get("demo") === "true";
+  const IS_DEMO = IS_DEMO_ENV || forceDemo;
+
+  // 🚀 DEMO MODE - Instant mock data (perfect for portfolio demo)
+  if (IS_DEMO) {
+    await new Promise((resolve) => setTimeout(resolve, 420)); // realistic small delay
+    return NextResponse.json(mockCryptoData);
+  }
+
+  // === REAL IMPLEMENTATION (CoinGecko) - used when demo mode is disabled ===
   try {
     const params = new URLSearchParams({
       vs_currency: "usd",
@@ -21,7 +36,7 @@ export async function GET() {
 
       return NextResponse.json(
         { error: "Failed to fetch market data" },
-        { status: marketDataResponse.status }
+        { status: marketDataResponse.status },
       );
     }
 
@@ -33,7 +48,7 @@ export async function GET() {
     console.error("Error fetching crypto data: ", error);
     return NextResponse.json(
       { error: "Internal server error" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

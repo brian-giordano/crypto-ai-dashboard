@@ -1,3 +1,4 @@
+// components/AiQuestionCard.tsx
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Sparkles } from "lucide-react";
 import { Button } from "./ui/button";
@@ -54,8 +55,8 @@ const AiQuestionCard: React.FC = () => {
       setTimeout(() => {
         setVisibleMetrics((prev) =>
           prev.map((item, i) =>
-            i === index ? { ...item, isVisible: true } : item
-          )
+            i === index ? { ...item, isVisible: true } : item,
+          ),
         );
       }, index * 600);
     });
@@ -151,7 +152,7 @@ const AiQuestionCard: React.FC = () => {
   };
 
   return (
-    <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700">
+    <div className="bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm border border-border/60 shadow-sm rounded-3xl p-6">
       <div>
         <h2 className="text-xl font-bold mb-4 text-gray-800 dark:text-white flex items-center">
           <Sparkles className="h-6 w-6 mr-2 text-pink-500" />
@@ -165,12 +166,12 @@ const AiQuestionCard: React.FC = () => {
               value={question}
               onChange={(e) => setQuestion(e.target.value)}
               placeholder="Ask about crypto trends, predictions, or insights..."
-              className="flex-grow px-4 py-2 border rounded-l-lg focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white h-10"
+              className="flex-grow px-4 py-3 border border-border rounded-l-3xl focus:outline-none focus:ring-2 focus:ring-pink-500 dark:bg-gray-800 dark:border-gray-700 dark:text-white h-11 text-sm"
             />
             <Button
               type="submit"
               disabled={isLoading || !question.trim()}
-              className="rounded-l-none h-10 bg-pink-500"
+              className="rounded-l-none h-11 bg-pink-500 hover:bg-pink-600 px-6"
               variant="default"
             >
               {isLoading ? (
@@ -221,7 +222,7 @@ const AiQuestionCard: React.FC = () => {
               <button
                 key={index}
                 onClick={() => selectSuggestedQuestion(q)}
-                className="text-xs bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200 px-2 py-1 rounded-full transition-colors"
+                className="text-sm px-4 py-2 rounded-2xl border border-border hover:border-pink-500 hover:bg-pink-500/10 transition-colors text-gray-700 dark:text-gray-200"
               >
                 {q}
               </button>
@@ -240,7 +241,7 @@ const AiQuestionCard: React.FC = () => {
         )}
 
         {isError && (
-          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-800 dark:text-red-200 rounded-lg p-4 mb-4">
+          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-800 dark:text-red-200 rounded-2xl p-4 mb-4">
             <p>
               {error?.message ||
                 "An error occurred while processing your question."}
@@ -250,13 +251,13 @@ const AiQuestionCard: React.FC = () => {
 
         <div className="mt-4">
           {visibleMetrics.length > 0 && (
-            <div className="mb-4 p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+            <div className="mb-4 p-4 bg-gray-50 dark:bg-gray-800/50 rounded-2xl">
               <div className="grid grid-cols-2 gap-2">
                 {visibleMetrics.map((metric) => (
                   <div
                     key={metric.label}
                     className={`
-                      bg-white dark:bg-gray-700 p-2 rounded border border-gray-200 
+                      bg-white dark:bg-gray-700 p-3 rounded-xl border border-gray-100 
                       dark:border-gray-600 transition-all duration-300 ease-in-out
                       ${
                         metric.isVisible
@@ -286,7 +287,7 @@ const AiQuestionCard: React.FC = () => {
           )}
 
           {response && (
-            <div className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+            <div className="p-4 bg-gray-50 dark:bg-gray-800/50 rounded-2xl">
               <p className="mb-4 text-gray-800 dark:text-gray-200">
                 {response.text ? (
                   <AnimatedResponse text={response.text} />
@@ -305,8 +306,8 @@ const AiQuestionCard: React.FC = () => {
                       response.sentiment.toUpperCase() === "POSITIVE"
                         ? "text-green-500"
                         : response.sentiment.toUpperCase() === "NEGATIVE"
-                        ? "text-red-500"
-                        : "text-gray-500"
+                          ? "text-red-500"
+                          : "text-gray-500"
                     }`}
                   >
                     {response.sentiment}
