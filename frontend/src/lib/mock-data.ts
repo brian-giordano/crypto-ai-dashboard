@@ -144,42 +144,41 @@ export const mockCryptoData = [
 
 export const mockAIResponse = (
   question: string,
-): { response: string; sources?: string[] } => {
+): { text: string; sentiment?: string; confidence?: number; metrics?: any } => {
   const q = question.toLowerCase();
 
   if (q.includes("bitcoin") || q.includes("btc")) {
     return {
-      response:
-        "Bitcoin is currently in a strong accumulation phase. On-chain metrics show increasing whale activity and a bullish RSI divergence. Short-term target: $92,000–$95,000. Long-term outlook remains extremely positive with ETF inflows continuing.",
-      sources: ["Glassnode", "CryptoQuant", "CoinGecko"],
+      text: "Bitcoin is currently in a strong accumulation phase. On-chain metrics show increasing whale activity and a bullish RSI divergence. Short-term target: $92,000–$95,000.",
+      sentiment: "POSITIVE",
+      confidence: 0.87,
     };
   }
   if (q.includes("ethereum") || q.includes("eth")) {
     return {
-      response:
-        "Ethereum is consolidating after the latest Dencun upgrade. Gas fees are at multi-year lows and staking participation is at an all-time high (32%+). Expect continued growth as Layer-2 activity explodes.",
-      sources: ["Dune Analytics", "Beacon Chain"],
+      text: "Ethereum is consolidating after the latest Dencun upgrade. Gas fees are at multi-year lows and staking participation is at an all-time high.",
+      sentiment: "NEUTRAL",
+      confidence: 0.82,
     };
   }
   if (q.includes("solana") || q.includes("sol")) {
     return {
-      response:
-        "Solana continues to lead in daily active users and DEX volume. The Firedancer upgrade is on track and should significantly improve network stability. High conviction long-term hold.",
-      sources: ["Solana Beach", "DefiLlama"],
+      text: "Solana continues to lead in daily active users and DEX volume. High conviction long-term hold.",
+      sentiment: "POSITIVE",
+      confidence: 0.91,
     };
   }
   if (q.includes("market") || q.includes("sentiment")) {
     return {
-      response:
-        "Overall crypto market sentiment is neutral-to-bullish (Fear & Greed Index: 68). Bitcoin dominance is stable at ~52%. Altcoins are starting to rotate in as we enter the next leg up.",
-      sources: ["Alternative.me", "TradingView"],
+      text: "Overall crypto market sentiment is neutral-to-bullish (Fear & Greed Index: 68).",
+      sentiment: "POSITIVE",
+      confidence: 0.75,
     };
   }
 
-  // Default thoughtful response
   return {
-    response:
-      "Great question! Based on current on-chain data, technical indicators, and macro factors, the asset is showing positive momentum. I'd recommend watching volume and key resistance levels before entering a position.",
-    sources: ["CoinGecko", "Glassnode"],
+    text: "Great question! Based on current on-chain data and technical indicators, the asset is showing positive momentum.",
+    sentiment: "NEUTRAL",
+    confidence: 0.68,
   };
 };
