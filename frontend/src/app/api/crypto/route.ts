@@ -6,18 +6,25 @@ const GcApiUrl = process.env.NEXT_PUBLIC_GC_MARKET_DATA_API_URL;
 const IS_DEMO_ENV = process.env.NEXT_PUBLIC_DEMO_MODE === "true";
 
 export async function GET(request: NextRequest) {
-  // Optional toggle support: ?demo=true in the URL overrides the env var
+  // Check demo mode
   const url = new URL(request.url);
   const forceDemo = url.searchParams.get("demo") === "true";
   const IS_DEMO = IS_DEMO_ENV || forceDemo;
 
-  // 🚀 DEMO MODE - Instant mock data (perfect for portfolio demo)
+  console.log("🔍 [API Crypto] Demo mode check:", {
+    IS_DEMO,
+    IS_DEMO_ENV,
+    forceDemo,
+  });
+
+  // 🚀 DEMO MODE - Return mock data instantly
   if (IS_DEMO) {
-    await new Promise((resolve) => setTimeout(resolve, 420)); // realistic small delay
+    await new Promise((resolve) => setTimeout(resolve, 420));
+    console.log("✅ [API Crypto] Returning mock data");
     return NextResponse.json(mockCryptoData);
   }
 
-  // === REAL IMPLEMENTATION (CoinGecko) - used when demo mode is disabled ===
+  // === REAL CoinGecko fallback (only used if demo is off) ===
   try {
     const params = new URLSearchParams({
       vs_currency: "usd",
@@ -30,10 +37,8 @@ export async function GET(request: NextRequest) {
     const marketDataResponse = await fetch(`${GcApiUrl}?${params}`);
 
     if (!marketDataResponse.ok) {
-      // Log the actual error response for debugging
       const errorText = await marketDataResponse.text();
       console.error("CoinGecko API Error:", errorText);
-
       return NextResponse.json(
         { error: "Failed to fetch market data" },
         { status: marketDataResponse.status },
@@ -41,8 +46,6 @@ export async function GET(request: NextRequest) {
     }
 
     const data = await marketDataResponse.json();
-    //console.log("API Response Data: ", data);
-
     return NextResponse.json(data);
   } catch (error) {
     console.error("Error fetching crypto data: ", error);
