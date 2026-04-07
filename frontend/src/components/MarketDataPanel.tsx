@@ -7,9 +7,6 @@ import { Plus, RefreshCw } from "lucide-react";
 import PriceChart from "./PriceChart";
 import { useCryptoStore } from "@/store/useCryptoStore";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-console.log("API_URL: ", API_URL);
-
 const MarketDataPanel: React.FC = () => {
   const { availableCryptos, addToDashboard, setAvailableCryptos } =
     useCryptoStore();
@@ -18,27 +15,27 @@ const MarketDataPanel: React.FC = () => {
 
   useEffect(() => {
     const fetchData = async () => {
-      // If data is already available, skip fetching to avoid rate limit.
+      // Skip if we already have data
       if (availableCryptos.length > 0) {
         setLoading(false);
         return;
       }
 
-      console.log("Fetching from: ", `${API_URL}/api/crypto`);
+      console.log("Fetching market data from local Next.js API...");
 
       try {
-        const response = await fetch(`${API_URL}/api/crypto`);
-        console.log("Response status: ", response.status);
+        const response = await fetch("/api/crypto");
 
         if (!response.ok) {
-          throw new Error("Failed to fetch data");
+          throw new Error(`Failed to fetch data: ${response.status}`);
         }
 
-        const data = await response.json(); // Only call .json() once
-        console.log("API Response: ", data);
+        const data = await response.json();
+        console.log("✅ Market data received:", data.length, "coins");
 
-        setAvailableCryptos(data); // Set the data directly
+        setAvailableCryptos(data);
       } catch (err) {
+        console.error("Market data fetch error:", err);
         setError(err instanceof Error ? err.message : "An error occurred");
       } finally {
         setLoading(false);
@@ -46,17 +43,17 @@ const MarketDataPanel: React.FC = () => {
     };
 
     fetchData();
-  }, [availableCryptos, setAvailableCryptos]);
+  }, [availableCryptos.length, setAvailableCryptos]); // Fixed dependency
 
-  if (loading) return <div>Loading market data...</div>;
-  if (error) return <div className="text-red-500">{error}</div>;
+  if (loading)
+    return <div className="p-4 text-center">Loading market data...</div>;
+  if (error) return <div className="text-red-500 p-4">{error}</div>;
 
-  // sort by MC before render.
-  const sortedAvailableCryptos = availableCryptos.sort(
-    (a, b) => b.market_cap - a.market_cap
+  // Sort by market cap
+  const sortedAvailableCryptos = [...availableCryptos].sort(
+    (a, b) => (b.market_cap || 0) - (a.market_cap || 0),
   );
 
-  // Empty state check
   if (sortedAvailableCryptos.length === 0) {
     return (
       <div className="p-8 text-center border rounded-lg dark:border-gray-700">
@@ -90,9 +87,7 @@ const MarketDataPanel: React.FC = () => {
                 variant="default"
                 className="group size-8 dark:bg-gray-500 hover:dark:bg-green-600 hover:scale-105"
                 size="sm"
-                onClick={() => {
-                  addToDashboard(crypto);
-                }}
+                onClick={() => addToDashboard(crypto)}
               >
                 <Plus className="dark:text-gray-200 group-hover:text-gray-200 group-hover:scale-125 transition-all" />
               </Button>
