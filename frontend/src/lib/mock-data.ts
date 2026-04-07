@@ -142,9 +142,19 @@ export const mockCryptoData = [
   },
 ];
 
-export const mockAIResponse = (
-  question: string,
-): { text: string; sentiment?: string; confidence?: number; metrics?: any } => {
+interface MockAIResponse {
+  text: string;
+  sentiment?: string;
+  confidence?: number;
+  metrics?: {
+    price: string;
+    marketCap: string;
+    volume24h: string;
+    change24h: string;
+  };
+}
+
+export const mockAIResponse = (question: string): MockAIResponse => {
   const q = question.toLowerCase();
 
   if (q.includes("bitcoin") || q.includes("btc")) {
